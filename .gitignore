@@ -47,3 +47,39 @@ po/*~
 
 # RStudio Connect folder
 rsconnect/
+
+RStudio project-specific files
+
+.Rproj.user/
+
+# History files
+
+.Rhistory
+.Rapp.history
+
+# Session Data
+
+.RData
+.RDataTmp
+
+
+# Knitr and R Markdown temporary files
+
+*.utf8.md
+*.knit.md
+
+
+# R package files
+
+*.R.orig
+*.R.rej
+*.R.orig~
+*~
+*.so
+*.o
+*.dll
+
+# OS-specific files
+
+.DS_Store
+Thumbs.db

@@ -1,0 +1,88 @@
+---
+title: "analysis"
+author: "AVN"
+date: "2025-11-04"
+output: pdf_document
+  number_sections: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Libraries
+
+```{r cars}
+library(tidyverse)
+```
+
+# Load data
+
+```{r echo=FALSE}
+# --- 1. Load Data ---
+data_path <- "data/wdbc.data"
+data_raw <- read.csv(data_path, header = FALSE)
+
+# --- 2. Define and Assign Column Names ---
+# As defined in 'wdbc.names'
+col_names <- c(
+  "id", "diagnosis",
+  "radius_mean", "texture_mean", "perimeter_mean", "area_mean", "smoothness_mean", "compactness_mean", "concavity_mean", "concave_points_mean", "symmetry_mean", "fractal_dimension_mean",
+  "radius_se", "texture_se", "perimeter_se", "area_se", "smoothness_se", "compactness_se", "concavity_se", "concave_points_se", "symmetry_se", "fractal_dimension_se",
+  "radius_worst", "texture_worst", "perimeter_worst", "area_worst", "smoothness_worst", "compactness_worst", "concavity_worst", "concave_points_worst", "symmetry_worst", "fractal_dimension_worst"
+)
+
+# --- 3. Assign these names to the dataframe ---
+colnames(data_raw) <- col_names
+
+# --- 4. Remove ID and create factors ---
+data_clean <- data_raw %>%
+  select(-id) %>%
+  mutate(diagnosis = as.factor(diagnosis))
+```
+
+
+```{r echo=FALSE}
+head(data_clean)
+cat("\nStructure of the clean data:\n")
+str(data_clean, max.level = 1)
+```
+
+# Pre-processing and data cleaning
+
+## Missing values
+```{r pressure, echo=FALSE}
+# --- Check for Total Missing Values ---
+missing_vals_total <- sum(is.na(data_clean))
+cat("Total missing values in the entire dataset:", missing_vals_total)
+```
+
+## Visualizing feature distributions - scales & outliers
+```{r}
+# To plot all 30 features at once, we first "pivot" the data
+# into a "long" format. This is the standard tidyverse way.
+data_long <- data_clean %>%
+  pivot_longer(
+    cols = -diagnosis,       # Pivot every column *except* 'diagnosis'
+    names_to = "feature",    # New column for the feature name
+    values_to = "value"      # New column for its value
+  )
+
+ggplot(data_long, aes(x = diagnosis, y = value, fill = diagnosis)) +
+  geom_boxplot() +
+  facet_wrap(~feature, scales = "free_y", ncol = 5) +
+  scale_fill_brewer(palette = "Paired") +
+  labs(
+    title = "Feature Distributions by Diagnosis (Malignant vs. Benign)",
+    x = "Diagnosis",
+    y = "Feature Value"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_blank(),  # Hide x-axis labels for a cleaner look
+    axis.ticks.x = element_blank(),
+    strip.text = element_text(size = 7) # Smaller facet labels
+  )
+```
+
+
