@@ -1,22 +1,37 @@
 ---
-title: "analysis"
-author: "AVN"
-date: "2025-11-04"
-output: pdf_document
-  number_sections: true
+title: "Your Compact Report"
+author: "Your Name"
+date: "`r format(Sys.Date(), '%B %d, %Y')`"
+output:
+  pdf_document:
+    toc: true
+    toc_depth: 2
+    number_sections: true
+    latex_engine: xelatex
+fontsize: 10pt
+geometry: "margin=0.75in"
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-# Libraries
 
-```{r cars}
+```{r libraries, echo=FALSE, message=FALSE, warning=FALSE}
+# Libraries
 library(tidyverse)
+library(caret)
+library(ggcorrplot)
 ```
 
-# Load data
+# Problem description and objectives
+
+# Data description
+The dataset used for this project is the Breast Cancer Wisconsin (Diagnostic) Dataset (WDBC), a classic benchmark for classification sourced from the UCI Machine Learning Repository.
+
+The dataset contains 569 observations of breast mass samples. The problem is a binary classification task, where the target variable, diagnosis, is classified as either Malignant (212 observations) or Benign (357 observations).
+
+Each instance is described by 30 numeric features that were computed from a digitized image of a fine needle aspirate (FNA) of the breast mass.
 
 ```{r echo=FALSE}
 # --- 1. Load Data ---
@@ -42,13 +57,7 @@ data_clean <- data_raw %>%
 ```
 
 
-```{r echo=FALSE}
-head(data_clean)
-cat("\nStructure of the clean data:\n")
-str(data_clean, max.level = 1)
-```
-
-# Pre-processing and data cleaning
+# Pre-processing
 
 ## Missing values
 ```{r pressure, echo=FALSE}
@@ -57,7 +66,7 @@ missing_vals_total <- sum(is.na(data_clean))
 cat("Total missing values in the entire dataset:", missing_vals_total)
 ```
 
-## Visualizing feature distributions - scales & outliers
+## Outliers, features distributions - scales
 ```{r}
 # To plot all 30 features at once, we first "pivot" the data
 # into a "long" format. This is the standard tidyverse way.
@@ -83,6 +92,133 @@ ggplot(data_long, aes(x = diagnosis, y = value, fill = diagnosis)) +
     axis.ticks.x = element_blank(),
     strip.text = element_text(size = 7) # Smaller facet labels
   )
+```
+
+* **Outliers (Anomalous Value):** 
+We immediately observed the presence of numerous outliers, represented by individual observations outside the IQR range. These are particularly present in features like `area_mean`, `area_worst`, and `concavity_worst`. 
+However, because those trust the original source, we know that these are not data entry errors but likely represent true, extreme biological values. Therefore, we made the decision not to remove these outliers, as they are part of the real-world problem. We will proceed with the full dataset, relying on our models to be robust enough to handle this variance.
+
+## Normalization
+
+Our plot also highlights the vast difference in scales across features. Gradient-based models like the Perceptron and Logistic Regression (GLM) are sensitive to feature scales. Without normalization, features with larger magnitudes would dominate the learning process. This plot provides a clear justification for standardizing the features before modeling.
+
+## Elimination of irrelevant variables
+
+For nearly every feature, the boxplot for the Malignant (M) class is visually distinct from the boxplot for the Benign (B) class. The medians, quartiles, and overall ranges show clear separation. This is an excellent sign, as it indicates that our features contain strong predictive information, and we can expect our models to perform well.
+
+```{r}
+# With AI
+nzv_check <- nearZeroVar(data_clean, saveMetrics = TRUE)
+
+# Filter to see only the features that *might* be a problem
+# A "TRUE" in the 'nzv' column means it's a candidate for removal.
+problematic_features <- nzv_check[nzv_check$nzv == TRUE, ]
+
+# Print the results
+if (nrow(problematic_features) > 0) {
+  cat("Found", nrow(problematic_features), "near-zero variance features:\n")
+  print(problematic_features)
+} else {
+  cat("No near-zero variance features found. All features have sufficient variance.\n")
+}
+```
+
+First, we checked for "irrelevant" features by running a "Near-Zero Variance" (NZV) test. This test finds any feature that is constant or nearly constant, as a feature that doesn't change cannot be a predictor. We used the `caret::nearZeroVar()` function to check all 30 features.
+
+we note that we used AI to help confirm this was the correct tool for this task.
+
+The NZV test showed that all 30 features have enough variance, so we did not eliminate any features at this step.
+
+## Elimination of redundant variables
+
+Our primary tool for this step was correlation analysis. We first calculated the correlation matrix for all numeric features and visualized it using a heatmap.
+
+```{r}
+# Correlation matrix.
+# numeric features selections
+numeric_features <- data_clean %>%
+  select_if(is.numeric)
+
+cor_matrix <- cor(numeric_features)
+
+# Plot the correlation heatmap
+ggcorrplot(cor_matrix,
+  type = "lower",
+  lab = FALSE,
+  colors = c("#2166AC", "white", "#B2182B"),
+  title = "Correlation Heatmap of 30 Numeric Features"
+)
+```
+The heatmap immediately revealed large blocks of high correlation (dark red), confirming that our dataset contains significant multicollinearity. For example, features related to tumor size, like radius_mean, perimeter_mean, and area_mean, are all nearly perfectly correlated.
+```{r}
+# Correlation and cutoff
+
+highly_correlated_features <- findCorrelation(cor_matrix, cutoff = 0.90, names = TRUE)
+
+
+cat("Found", length(highly_correlated_features), "redundant features to remove (cutoff > 0.90):\n")
+print(highly_correlated_features)
+
+
+# Create the reduced Dataset
+
+data_clean_reduced <- data_clean %>%
+  select(-all_of(highly_correlated_features))
+
+cat("\nOriginal data had", ncol(data_clean), "columns (30 features + 1 target).\n")
+cat("Reduced data has", ncol(data_clean_reduced), "columns.\n")
+head(data_clean_reduced)
+```
+While the heatmap is excellent for visualization, we use a correlation matrix and a cutoff of 0.90 (standard threshold) for reducing feature redundancy. This function automatically identifies the minimum number of features to remove to ensure that no two features in the remaining dataset have a correlation greater than 0.90.
+
+This analysis identified 10 features as redundant.
+
+## Normalization of the variables
+```{r}
+# --- 6. Final Pre-Processing: Data Splitting and Normalization ---
+# This is Point 8 from the project guidelines.
+
+# Set a seed for 100% reproducible results
+set.seed(123)
+
+# --- 6.1. Process the FULL 30-feature dataset ---
+
+# 1. Split 'data_clean' (Full dataset)
+train_index_full <- createDataPartition(data_clean$diagnosis, p = 0.80, list = FALSE)
+train_data_full    <- data_clean[train_index_full, ]
+test_data_full     <- data_clean[-train_index_full, ]
+
+# 2. "Fit" the normalization parameters (mean/sd) on the training data
+# We exclude column 1 ('diagnosis') from the calculation
+preproc_params_full <- preProcess(train_data_full[, -1], method = c("center", "scale"))
+
+# 3. "Transform" both datasets using the *training* parameters
+train_data_full_norm <- predict(preproc_params_full, train_data_full)
+test_data_full_norm  <- predict(preproc_params_full, test_data_full)
+
+
+# --- 6.2. Process the REDUCED 20-feature dataset ---
+
+# 1. Split 'data_clean_reduced'
+train_index_reduced <- createDataPartition(data_clean_reduced$diagnosis, p = 0.80, list = FALSE)
+train_data_reduced    <- data_clean_reduced[train_index_reduced, ]
+test_data_reduced     <- data_clean_reduced[-train_index_reduced, ]
+
+# 2. "Fit" normalization parameters on the *reduced* training data
+# We exclude column 1 ('diagnosis') from the calculation
+preproc_params_reduced <- preProcess(train_data_reduced[, -1], method = c("center", "scale"))
+
+# 3. "Transform" both reduced datasets
+train_data_reduced_norm <- predict(preproc_params_reduced, train_data_reduced)
+test_data_reduced_norm  <- predict(preproc_params_reduced, test_data_reduced)
+
+
+# --- 6.3. Verification ---
+cat("--- Full Dataset (Normalized) ---\n")
+print(head(train_data_full_norm[, 2:6])) # Show first few features
+
+cat("\n--- Reduced Dataset (Normalized) ---\n")
+print(head(train_data_reduced_norm[, 2:6])) # Show first few features
 ```
 
 
