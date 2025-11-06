@@ -167,58 +167,233 @@ data_clean_reduced <- data_clean %>%
 
 cat("\nOriginal data had", ncol(data_clean), "columns (30 features + 1 target).\n")
 cat("Reduced data has", ncol(data_clean_reduced), "columns.\n")
-head(data_clean_reduced)
 ```
 While the heatmap is excellent for visualization, we use a correlation matrix and a cutoff of 0.90 (standard threshold) for reducing feature redundancy. This function automatically identifies the minimum number of features to remove to ensure that no two features in the remaining dataset have a correlation greater than 0.90.
 
 This analysis identified 10 features as redundant.
 
 ## Normalization of the variables
-```{r}
-# --- 6. Final Pre-Processing: Data Splitting and Normalization ---
-# This is Point 8 from the project guidelines.
+done in models
 
-# Set a seed for 100% reproducible results
-set.seed(123)
+# Models
 
-# --- 6.1. Process the FULL 30-feature dataset ---
+```{r warning=FALSE, echo=FALSE}
+# --- 6. Final Data Splitting ---
+# We will use our *reduced 20-feature dataset* as the starting point.
 
-# 1. Split 'data_clean' (Full dataset)
-train_index_full <- createDataPartition(data_clean$diagnosis, p = 0.80, list = FALSE)
-train_data_full    <- data_clean[train_index_full, ]
-test_data_full     <- data_clean[-train_index_full, ]
+set.seed(123) # for reproducibility
+train_index <- createDataPartition(data_clean_reduced$diagnosis, p = 0.80, list = FALSE)
 
-# 2. "Fit" the normalization parameters (mean/sd) on the training data
-# We exclude column 1 ('diagnosis') from the calculation
-preproc_params_full <- preProcess(train_data_full[, -1], method = c("center", "scale"))
-
-# 3. "Transform" both datasets using the *training* parameters
-train_data_full_norm <- predict(preproc_params_full, train_data_full)
-test_data_full_norm  <- predict(preproc_params_full, test_data_full)
+# These are now our main training/testing dataframes
+training_data <- data_clean_reduced[train_index, ]
+holdout_data  <- data_clean_reduced[-train_index, ] # For final testing later
 
 
-# --- 6.2. Process the REDUCED 20-feature dataset ---
+# --- 7. Model Training (3x3 Experiment) ---
+# We will use 10-fold cross-validation
+cv_control <- trainControl(
+  method = "cv",
+  number = 10,
+  savePredictions = "final" # To collect results for t-tests
+)
 
-# 1. Split 'data_clean_reduced'
-train_index_reduced <- createDataPartition(data_clean_reduced$diagnosis, p = 0.80, list = FALSE)
-train_data_reduced    <- data_clean_reduced[train_index_reduced, ]
-test_data_reduced     <- data_clean_reduced[-train_index_reduced, ]
+# --- 7.1. EXPERIMENT 1: Models on 20 Reduced Features (Baseline) ---
+# preProcess = c("center", "scale")
+cat("Starting Experiment 1: 20 Reduced Features\n")
 
-# 2. "Fit" normalization parameters on the *reduced* training data
-# We exclude column 1 ('diagnosis') from the calculation
-preproc_params_reduced <- preProcess(train_data_reduced[, -1], method = c("center", "scale"))
+model_glm_reduced <- train(
+  diagnosis ~ ., data = training_data, method = "glm",
+  trControl = cv_control, preProcess = c("center", "scale")
+)
 
-# 3. "Transform" both reduced datasets
-train_data_reduced_norm <- predict(preproc_params_reduced, train_data_reduced)
-test_data_reduced_norm  <- predict(preproc_params_reduced, test_data_reduced)
+model_gnb_reduced <- train(
+  diagnosis ~ ., data = training_data, method = "nb", # 'nb' is Naive Bayes
+  trControl = cv_control, preProcess = c("center", "scale")
+)
 
+model_svm_reduced <- train(
+  diagnosis ~ ., data = training_data, method = "svmLinear",
+  trControl = cv_control, preProcess = c("center", "scale")
+)
 
-# --- 6.3. Verification ---
-cat("--- Full Dataset (Normalized) ---\n")
-print(head(train_data_full_norm[, 2:6])) # Show first few features
+# --- 7.2. EXPERIMENT 2: Models on PCA Components ---
+# preProcess = c("center", "scale", "pca")
+cat("Starting Experiment 2: PCA Components\n")
 
-cat("\n--- Reduced Dataset (Normalized) ---\n")
-print(head(train_data_reduced_norm[, 2:6])) # Show first few features
+model_glm_pca <- train(
+  diagnosis ~ ., data = training_data, method = "glm",
+  trControl = cv_control, preProcess = c("center", "scale", "pca")
+)
+
+model_gnb_pca <- train(
+  diagnosis ~ ., data = training_data, method = "nb",
+  trControl = cv_control, preProcess = c("center", "scale", "pca")
+)
+
+model_svm_pca <- train(
+  diagnosis ~ ., data = training_data, method = "svmLinear",
+  trControl = cv_control, preProcess = c("center", "scale", "pca")
+)
+
+# --- 7.3. EXPERIMENT 3: Models on LDA Component ---
+cat("Starting Experiment 3: LDA Component (2-Step Method)\n")
+
+# --- Step 1: Train the LDA model itself ---
+# This serves as our "LDA model" for comparison AND as our transformer
+# We use the 20-feature 'training_data'
+cat("Training LDA model (to be used as transformer)...\n")
+model_lda_reduced <- train(
+  diagnosis ~ .,
+  data = training_data, # 20-feature 'training_data'
+  method = "lda",
+  trControl = cv_control, # This is our 10-fold CV
+  preProcess = c("center", "scale")
+)
+
+# --- Step 2: Create the new, single-feature datasets ---
+# We use our trained LDA model to "predict" and extract the new component.
+# This creates new dataframes with just 'diagnosis' and 'LD1'.
+cat("Extracting LD1 component...\n")
+train_data_lda_comp <- data.frame(
+  diagnosis = training_data$diagnosis,
+  LD1 = predict(model_lda_reduced, newdata = training_data)
+)
+
+# We also transform our holdout data for the final test
+holdout_data_lda_comp <- data.frame(
+  diagnosis = holdout_data$diagnosis,
+  LD1 = predict(model_lda_reduced, newdata = holdout_data)
+)
+
+# --- Step 3: Train GLM, GNB, and SVM on the new 'LD1' feature ---
+# We must use a *new* cv_control because the data is different
+# (e.g., we don't need to center/scale a single feature).
+cv_control_lda <- trainControl(method = "cv", number = 10, savePredictions = "final")
+
+cat("Training GLM on LDA component...\n")
+model_glm_lda <- train(
+  diagnosis ~ .,
+  data = train_data_lda_comp,
+  method = "glm",
+  trControl = cv_control_lda
+)
+
+cat("Training GNB on LDA component...\n")
+model_gnb_lda <- train(
+  diagnosis ~ .,
+  data = train_data_lda_comp,
+  method = "nb",
+  trControl = cv_control_lda
+)
+
+cat("Training SVM on LDA component...\n")
+model_svm_lda <- train(
+  diagnosis ~ .,
+  data = train_data_lda_comp,
+  method = "svmLinear",
+  trControl = cv_control_lda
+)
+
+cat("All LDA-component models trained.\n")
 ```
+
+## Final results
+```{r}
+# --- 8. Final Results Comparison (Corrected) ---
+# We now collect all our models.
+all_model_results <- resamples(list(
+  # Experiment 1 (Reduced 20 Features)
+  GLM_Reduced = model_glm_reduced,
+  GNB_Reduced = model_gnb_reduced,
+  SVM_Reduced = model_svm_reduced,
+  LDA_Reduced = model_lda_reduced,
+  
+  # Experiment 2 (PCA Components)
+  GLM_PCA     = model_glm_pca,
+  GNB_PCA     = model_gnb_pca,
+  SVM_PCA     = model_svm_pca,
+
+  # Experiment 3 (LDA Component)
+  GLM_LDA_Comp = model_glm_lda,
+  GNB_LDA_Comp = model_gnb_lda,
+  SVM_LDA_Comp = model_svm_lda
+))
+
+# 1. Show the summary table
+cat("Final CV Performance Summary:\n")
+summary(all_model_results)
+
+# 2. Plot the results
+dotplot(all_model_results, metric = "Accuracy")
+
+# 3. Statistical Comparison (as requested by teacher)
+cat("\nFinal Statistical Comparison (Paired t-test):\n")
+all_model_diffs <- diff(all_model_results)
+summary(all_model_diffs)
+```
+
+```{r}
+all_model_results$timings
+```
+
+
+## Accuracy vs. Training Time Trade-off
+```{r}
+# --- 9. Accuracy vs. Training Time Trade-off (FIXED) ---
+
+# We need 'tibble' to use rownames_to_column
+library(tibble) 
+
+# --- Process Accuracy Data ---
+# This part was correct, as '$values' *is* per-fold data
+accuracy_stats <- all_model_results$values %>%
+  pivot_longer(
+    cols = -Resample,
+    names_to = "ModelMetric",
+    values_to = "Value"
+  ) %>%
+  tidyr::separate(ModelMetric, into = c("Model", "Metric"), sep = "~") %>%
+  filter(Metric == "Accuracy") %>%
+  group_by(Model) %>%
+  summarize(Mean_Accuracy = mean(Value, na.rm = TRUE))
+
+
+# --- Process Timings Data (This is the FIX) ---
+# As your screenshot shows, '$timings' is a SUMMARY table.
+# The 'Model' is in the row names, and 'Everything' is the total time.
+time_stats <- all_model_results$timings %>%
+  
+  # 1. Convert row names (e.g., "GLM_Reduced") into a real column
+  rownames_to_column(var = "Model") %>%
+  
+  # 2. Select the Model and the 'Everything' column (total time)
+  #    and rename 'Everything' to match our other table.
+  select(Model, Mean_Time_sec = Everything)
+
+
+# --- Join and Plot ---
+# This join will now work because both tables have a 'Model' column
+performance_summary <- inner_join(accuracy_stats, time_stats, by = "Model")
+
+# 4. Print the final summary table
+cat("--- Final Performance vs. Cost Summary ---\n")
+performance_summary <- performance_summary %>%
+  arrange(desc(Mean_Accuracy))
+print(performance_summary)
+
+# 5. Plot the Trade-off
+ggplot(performance_summary, aes(x = Mean_Accuracy, y = Mean_Time_sec, color = Model)) +
+  geom_point(size = 4, alpha = 0.8) +
+  geom_text(aes(label = Model), vjust = -1.2, size = 3.5) + 
+  labs(
+    title = "Model Performance vs. Training Time Trade-off",
+    subtitle = "Best models are in the top-left corner (High Accuracy, Low Time)",
+    x = "Mean Accuracy (10-fold CV)",
+    y = "Mean Training Time (seconds)"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
 
 
