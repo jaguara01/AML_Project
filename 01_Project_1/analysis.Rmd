@@ -16,7 +16,6 @@ geometry: "margin=0.75in"
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-
 ```{r libraries, echo=FALSE, message=FALSE, warning=FALSE}
 # Libraries
 library(tidyverse)
@@ -24,14 +23,51 @@ library(caret)
 library(ggcorrplot)
 ```
 
-# Problem description and objectives
+Abstract [Your abstract here] \# Introduction [Your introduction here. Start with the problem and its motivation. Then describe your approach and main findings.] \# Problem statement
 
-# Data description
+# Related Work
+
+# Data and Preprocessing
+
+## Data description
+
 The dataset used for this project is the Breast Cancer Wisconsin (Diagnostic) Dataset (WDBC), a classic benchmark for classification sourced from the UCI Machine Learning Repository.
 
 The dataset contains 569 observations of breast mass samples. The problem is a binary classification task, where the target variable, diagnosis, is classified as either Malignant (212 observations) or Benign (357 observations).
 
-Each instance is described by 30 numeric features that were computed from a digitized image of a fine needle aspirate (FNA) of the breast mass.
+Each instance is described by 30 numeric features that were computed from a digitized image of a fine needle aspirate (FNA) of the breast mass. Each image yields **10 basic features** that describe characteristics of the cell nucleus:
+
+| Feature               | Description                                                              |
+|------------------------------|------------------------------------------|
+| **Radius**            | Average distance from center to perimeter points (nucleus size)          |
+| **Texture**           | Variation in gray-scale intensity (smoothness vs. roughness)             |
+| **Perimeter**         | Length around the boundary of the nucleus                                |
+| **Area**              | Total size of the nucleus                                                |
+| **Smoothness**        | Local variation in radius lengths (edge regularity)                      |
+| **Compactness**       | Measure of shape compactness, $(\text{perimeter}^2 / \text{area}) - 1.0$ |
+| **Concavity**         | Severity of inward curvature along the boundary                          |
+| **Concave Points**    | Number of distinct inward curvature points                               |
+| **Symmetry**          | Symmetry of the nucleus shape                                            |
+| **Fractal Dimension** | Complexity of the boundary (“coastline approximation”)                   |
+
+For each of these 10 base features, three statistics were computed: - **Mean value** - **Standard error (SE)** - **“Worst” (largest mean of the three highest values)**
+
+This yields **30 derived features** in total.
+
+| Property                                   | Variable | Value                                                        |
+|--------------------------|--------------------------|--------------------|
+| **Number of observations**                 | *n*      | **569**                                                      |
+| **Number of features**                     | *d*      | **30** (plus ID and diagnosis = 32 total columns)            |
+| **Feature types**                          | —        | **Continuous: 30**, **Categorical: 1 (diagnosis)**           |
+| **Number of classes (for classification)** | *C*      | **2** *(Malignant, Benign)*                                  |
+| **Class distribution**                     | —        | **212 Malignant (37%)**, **357 Benign (63%)** — *imbalanced* |
+| **Missing values percentage**              | —        | **0% (no missing data)**                                     |
+
+-   The dataset provides **numeric**, **well-structured**, and **clean** measurements ideal for supervised learning.
+-   The classification task is **binary** and slightly **imbalanced** toward the benign class.
+-   All features are **continuous**, making it suitable for algorithms like **Logistic Regression**, **Gaussian Naive Bayes**, or **Perceptron Algorithm**.
+
+## Exploratory data analysis
 
 ```{r echo=FALSE}
 # --- 1. Load Data ---
@@ -55,18 +91,20 @@ data_clean <- data_raw %>%
   select(-id) %>%
   mutate(diagnosis = as.factor(diagnosis))
 ```
+[Do something about variables]
 
+## Preprocessing steps
 
-# Pre-processing
+### Missing values
 
-## Missing values
 ```{r pressure, echo=FALSE}
 # --- Check for Total Missing Values ---
 missing_vals_total <- sum(is.na(data_clean))
 cat("Total missing values in the entire dataset:", missing_vals_total)
 ```
 
-## Outliers, features distributions - scales
+### Outliers, features distributions - scales
+
 ```{r}
 # To plot all 30 features at once, we first "pivot" the data
 # into a "long" format. This is the standard tidyverse way.
@@ -94,15 +132,13 @@ ggplot(data_long, aes(x = diagnosis, y = value, fill = diagnosis)) +
   )
 ```
 
-* **Outliers (Anomalous Value):** 
-We immediately observed the presence of numerous outliers, represented by individual observations outside the IQR range. These are particularly present in features like `area_mean`, `area_worst`, and `concavity_worst`. 
-However, because those trust the original source, we know that these are not data entry errors but likely represent true, extreme biological values. Therefore, we made the decision not to remove these outliers, as they are part of the real-world problem. We will proceed with the full dataset, relying on our models to be robust enough to handle this variance.
+-   **Outliers (Anomalous Value):** We immediately observed the presence of numerous outliers, represented by individual observations outside the IQR range. These are particularly present in features like `area_mean`, `area_worst`, and `concavity_worst`. However, because those trust the original source, we know that these are not data entry errors but likely represent true, extreme biological values. Therefore, we made the decision not to remove these outliers, as they are part of the real-world problem. We will proceed with the full dataset, relying on our models to be robust enough to handle this variance.
 
-## Normalization
+### Normalization
 
 Our plot also highlights the vast difference in scales across features. Gradient-based models like the Perceptron and Logistic Regression (GLM) are sensitive to feature scales. Without normalization, features with larger magnitudes would dominate the learning process. This plot provides a clear justification for standardizing the features before modeling.
 
-## Elimination of irrelevant variables
+### Elimination of irrelevant variables
 
 For nearly every feature, the boxplot for the Malignant (M) class is visually distinct from the boxplot for the Benign (B) class. The medians, quartiles, and overall ranges show clear separation. This is an excellent sign, as it indicates that our features contain strong predictive information, and we can expect our models to perform well.
 
@@ -129,7 +165,7 @@ we note that we used AI to help confirm this was the correct tool for this task.
 
 The NZV test showed that all 30 features have enough variance, so we did not eliminate any features at this step.
 
-## Elimination of redundant variables
+### Elimination of redundant variables
 
 Our primary tool for this step was correlation analysis. We first calculated the correlation matrix for all numeric features and visualized it using a heatmap.
 
@@ -149,7 +185,9 @@ ggcorrplot(cor_matrix,
   title = "Correlation Heatmap of 30 Numeric Features"
 )
 ```
+
 The heatmap immediately revealed large blocks of high correlation (dark red), confirming that our dataset contains significant multicollinearity. For example, features related to tumor size, like radius_mean, perimeter_mean, and area_mean, are all nearly perfectly correlated.
+
 ```{r}
 # Correlation and cutoff
 
@@ -168,15 +206,37 @@ data_clean_reduced <- data_clean %>%
 cat("\nOriginal data had", ncol(data_clean), "columns (30 features + 1 target).\n")
 cat("Reduced data has", ncol(data_clean_reduced), "columns.\n")
 ```
+
 While the heatmap is excellent for visualization, we use a correlation matrix and a cutoff of 0.90 (standard threshold) for reducing feature redundancy. This function automatically identifies the minimum number of features to remove to ensure that no two features in the remaining dataset have a correlation greater than 0.90.
 
 This analysis identified 10 features as redundant.
 
-## Normalization of the variables
+### Normalization of the variables
+
 done in models
 
-# Models
+# Methodology
 
+## Experimental protocol
+
+## Method 1:[Method name]
+
+### Model formulation
+
+### Theoretical properties and justification
+
+### Implementation details
+
+## Method 2:[Method name]
+
+[Your description of Method 2 following the same structure as Method 1]
+
+## Comparison framework
+
+[Your comparison framework here]
+
+# Models
+#TODO Adapt it to the schema provided by the teacher
 ```{r warning=FALSE, echo=FALSE}
 # --- 6. Final Data Splitting ---
 # We will use our *reduced 20-feature dataset* as the starting point.
@@ -297,7 +357,20 @@ model_svm_lda <- train(
 cat("All LDA-component models trained.\n")
 ```
 
+# Discussion of results
+## Overall performance
+[Your overall results here]
+
+## Detailed Analysis
+[Your detailed analysis here with insightful interpretation]
+
+## Model selection and generalization error
+[Your final model selection and generalization error estimate here]
+
+
 ## Final results
+#TODO Adapt it to the schema provided by the teacher
+
 ```{r}
 # --- 8. Final Results Comparison (Corrected) ---
 # We now collect all our models.
@@ -336,8 +409,8 @@ summary(all_model_diffs)
 all_model_results$timings
 ```
 
-
 ## Accuracy vs. Training Time Trade-off
+
 ```{r}
 # --- 9. Accuracy vs. Training Time Trade-off (FIXED) ---
 
@@ -447,4 +520,14 @@ ggplot(pred_times_long, aes(x = Model, y = PredictionTime_sec, fill = Model)) +
   )
 ```
 
+# Conclusions
 
+# References
+
+Wolberg, W., Mangasarian, O., Street, N., & Street, W. (1993). Breast Cancer Wisconsin (Diagnostic) [Dataset]. UCI Machine Learning Repository. <https://doi.org/10.24432/C5DW2B>.
+
+#A Additional results [Your additional results here if needed]
+
+#B Mathematical derivations [Your derivations here if needed]
+
+#C Implementation details [Your implementation details here if needed]
