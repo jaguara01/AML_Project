@@ -395,5 +395,56 @@ ggplot(performance_summary, aes(x = Mean_Accuracy, y = Mean_Time_sec, color = Mo
   theme(legend.position = "none")
 ```
 
+```{r}
+# --- 10. Analysis of Prediction Time per Fold ---
+#
+# While 'resamples()' only gives us *total* training time,
+# the individual 'train' objects store the *prediction time* for each fold.
+# This is a key measure of a model's efficiency.
+
+# 1. Create a new dataframe from the per-fold prediction timings
+#    (We'll use our stable 7-model set)
+pred_times_df <- data.frame(
+  Fold = 1:10, # Assuming 10 folds
+  
+  # Experiment 1
+  GLM_Reduced = model_glm_reduced$times$prediction,
+  GNB_Reduced = model_gnb_reduced$times$prediction,
+  SVM_Reduced = model_svm_reduced$times$prediction,
+  LDA_Reduced = model_lda_reduced$times$prediction,
+  
+  # Experiment 2
+  GLM_PCA     = model_glm_pca$times$prediction,
+  GNB_PCA     = model_gnb_pca$times$prediction,
+  SVM_PCA     = model_svm_pca,
+  
+  # Experiment 3
+  GLM_LDA_Comp = model_glm_lda$times$prediction
+)
+
+# 2. Pivot this new dataframe into a long format for plotting
+pred_times_long <- pred_times_df %>%
+  pivot_longer(
+    cols = -Fold,
+    names_to = "Model",
+    values_to = "PredictionTime_sec"
+  )
+
+# 3. Create a boxplot to compare the distribution of prediction times
+ggplot(pred_times_long, aes(x = Model, y = PredictionTime_sec, fill = Model)) +
+  geom_boxplot() +
+  labs(
+    title = "Model Prediction Time per Fold (10-fold CV)",
+    subtitle = "A measure of model efficiency at prediction time. Lower is better.",
+    x = "Model",
+    y = "Prediction Time (seconds)"
+  ) +
+  scale_y_log10() + # Use a log scale, as SVM might be much slower
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "none"
+  )
+```
 
 
