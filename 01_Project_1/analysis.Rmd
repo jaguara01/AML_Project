@@ -3,13 +3,17 @@ title: "Your Compact Report"
 author: "Your Name"
 date: "`r format(Sys.Date(), '%B %d, %Y')`"
 output:
+  html_document:
+    toc: true
+    toc_depth: '2'
+    df_print: paged
   pdf_document:
     toc: true
     toc_depth: 2
     number_sections: true
     latex_engine: xelatex
 fontsize: 10pt
-geometry: "margin=0.75in"
+geometry: margin=0.75in
 ---
 
 ```{r setup, include=FALSE}
@@ -23,7 +27,10 @@ library(caret)
 library(ggcorrplot)
 ```
 
-Abstract [Your abstract here] \# Introduction [Your introduction here. Start with the problem and its motivation. Then describe your approach and main findings.] \# Problem statement
+Abstract [Your abstract here] 
+# Introduction 
+[Your introduction here. Start with the problem and its motivation. Then describe your approach and main findings.] 
+# Problem statement
 
 # Related Work
 
@@ -218,25 +225,21 @@ done in models
 # Methodology
 
 ## Experimental protocol
+After cleaning and reducing the original dataset to 20 key features, the data is split into **80% training** and **20% holdout** sets to ensure fair evaluation. All models are trained using **10-fold cross-validation** to obtain robust performance estimates and minimize overfitting.
 
-## Method 1:[Method name]
+Three groups of experiments are conducted to assess the impact of different feature representations on classification accuracy:
 
-### Model formulation
+1. **Experiment 1 – Baseline (Reduced Features):**
+   Models (GLM, Gaussian Naive Bayes, and Linear SVM) are trained using the 20 selected features after centering and scaling.
 
-### Theoretical properties and justification
+2. **Experiment 2 – PCA Components:**
+   The same models are trained on **Principal Component Analysis (PCA)**–transformed data, where dimensionality reduction captures the main variance directions in the dataset.
 
-### Implementation details
+3. **Experiment 3 – LDA Component:**
+   A **Linear Discriminant Analysis (LDA)** model is first trained to extract a single discriminant component (LD1) summarizing the separation between classes. GLM, Naive Bayes, and SVM are then retrained using only this new feature to test the effectiveness of supervised dimensionality reduction.
 
-## Method 2:[Method name]
+The results from all three setups will later be compared—both across models (GLM vs. NB vs. SVM) and across representations (raw features vs. PCA vs. LDA)—to determine which combination achieves the best generalization performance on unseen data.
 
-[Your description of Method 2 following the same structure as Method 1]
-
-## Comparison framework
-
-[Your comparison framework here]
-
-# Models
-#TODO Adapt it to the schema provided by the teacher
 ```{r warning=FALSE, echo=FALSE}
 # --- 6. Final Data Splitting ---
 # We will use our *reduced 20-feature dataset* as the starting point.
@@ -324,7 +327,6 @@ holdout_data_lda_comp <- data.frame(
   diagnosis = holdout_data$diagnosis,
   LD1 = predict(model_lda_reduced, newdata = holdout_data)
 )
-
 # --- Step 3: Train GLM, GNB, and SVM on the new 'LD1' feature ---
 # We must use a *new* cv_control because the data is different
 # (e.g., we don't need to center/scale a single feature).
@@ -356,6 +358,27 @@ model_svm_lda <- train(
 
 cat("All LDA-component models trained.\n")
 ```
+## Method 1:GLM
+#TODO
+### Model formulation
+
+### Theoretical properties and justification
+
+### Implementation details
+
+## Method 2:GNB
+
+[Your description of Method 2 following the same structure as Method 1]
+
+## Method 3:SVM
+
+[Your description of Method 3 following the same structure as Method 1]
+
+
+## Comparison framework
+
+[Your comparison framework here]
+
 
 # Discussion of results
 ## Overall performance
