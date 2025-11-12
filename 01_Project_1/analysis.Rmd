@@ -27,12 +27,29 @@ library(caret)
 library(ggcorrplot)
 ```
 
-Abstract [Your abstract here] 
-# Introduction 
-[Your introduction here. Start with the problem and its motivation. Then describe your approach and main findings.] 
-# Problem statement
+Here is a draft of the **Abstract**, **Introduction**, **Problem Statement**, and **Related Work** sections for your project, incorporating a review of prior publications using the Breast Cancer Wisconsin (Diagnostic) Dataset (WDBC) and stating our ambitions. You can tailor the language, tone and details as you see fit.
 
-# Related Work
+---
+
+## Abstract
+
+Breast cancer classification is a critical task in medical diagnostics, where reliable automated methods can assist clinicians in identifying malignant cases early. This project uses the Breast Cancer Wisconsin (Diagnostic) dataset to compare three machine learning approaches—Generalized Linear Models (GLM), Gaussian Naive Bayes (GNB), and Support Vector Machines (SVM)—under different feature representation strategies, including dimensionality reduction via PCA and LDA. Our goal is to evaluate how model complexity and feature transformation affect predictive performance and interpretability. The results demonstrate that strong classification performance can be achieved even with simpler, more transparent models when features are properly preprocessed and selected, suggesting a practical balance between accuracy and interpretability for medical decision support.
+
+
+
+# Introduction
+
+Breast cancer is among the most common cancers affecting women worldwide, and early diagnosis is vital for increasing survival rates. Automated classification systems that accurately designate a tumor as benign or malignant have substantial clinical utility: they can support radiologists and pathologists, reduce workload, and potentially flag cases for further review. The WDBC dataset — featuring 30 numeric attributes derived from digitized cell-nucleus images (radius, texture, area, smoothness, concavity, etc.) — is a standard benchmark for such binary classification tasks. In this study, we adopt a comparative modelling approach: we train GLM, GNB and SVM classifiers under three different feature-representation regimes (raw reduced features, PCA components, single LDA discriminant). We use 10-fold cross-validation and a separate hold-out set to assess generalization. Our goal is to provide both strong performance and insight into model behaviour: Which model/representation combos offer the best trade-off between accuracy, interpretability and computational cost?
+
+
+# Problem Statement
+
+Given a set of breast mass samples represented by numeric features measuring cell-nuclei properties, the task is to classify each sample into one of two classes: malignant (M) or benign (B). Formally, we seek a function ( f: \mathbb{R}^d \to {0,1} ) (or ({-1,+1})) that maximizes correct classification rate (and other metrics such as AUC, F1-score) on unseen data while maintaining interpretability and robustness. We also investigate how different feature-space transformations (PCA, LDA) affect model performance and whether simpler models can “close the gap” with more complex algorithms.
+
+
+## Related Work
+
+The WDBC dataset has been extensively studied in the machine-learning literature. For example, Paudel et al. (2024) compared logistic regression and SVM on WDBC and found SVM outperformed logistic regression across precision, recall, F1-score and AUC. ([Nepal Journals Online][1]) Another study by Arshad et al. (2023) found that simple linear models such as logistic regression achieved a test mean accuracy of 97.28% (std. 1.62%) and outperformed decision trees and SVM on that dataset, highlighting the value of interpretability in clinical settings. ([arXiv][2]) Hossin et al. (2024) compared multiple classifiers including GLM, GNB, SVM, random forest, k-NN and concluded that among them SVM and GNB provided strong performance on WDBC, with major gains when preprocessing and feature-engineering were used. ([BIEEI][3]) These studies provide benchmarks and also motivate our exploration of model-representation interplay: given evidence that both simple (GLM) and complex (SVM) models excel, our ambition is to systematically compare them under controlled experimental protocol, including feature reduction, PCA and LDA scenarios, and to evaluate not only accuracy but also interpretability, computational cost and robustness.
 
 # Data and Preprocessing
 
@@ -358,27 +375,75 @@ model_svm_lda <- train(
 
 cat("All LDA-component models trained.\n")
 ```
-## Method 1:GLM
-#TODO
+## Method 1: Generalized Linear Model (GLM)
+
 ### Model formulation
+A **Generalized Linear Model (GLM)** assumes that the response variable \(Y\) follows a distribution from the exponential family and that its mean \(\mu = \mathbb{E}[Y|X]\) is related to a linear predictor through a *link function* \(g(\cdot)\):
+\[
+g(\mu) = \beta_0 + \beta_1 x_1 + \cdots + \beta_d x_d.
+\]
+For binary classification, the model used is **logistic regression**, with
+\[
+g(\mu) = \text{logit}(\mu) = \log\left(\frac{\mu}{1 - \mu}\right),
+\]
+which ensures predictions stay between 0 and 1.
 
 ### Theoretical properties and justification
+GLMs are statistically grounded, interpretable, and perform well when the relationship between predictors and the log-odds of the outcome is approximately linear. They provide *probabilistic outputs* and naturally model class probabilities. Logistic regression also maximizes the likelihood of observed labels under a Bernoulli distribution, making it robust for well-separated classes.
 
 ### Implementation details
+The GLM was implemented using the `train()` function from the **caret** package with `method = "glm"`, applying **centering and scaling** as preprocessing. Model fitting uses **Iteratively Reweighted Least Squares (IRLS)** to find the maximum-likelihood estimates of \(\beta\). Regularization was not applied in this baseline version.
 
-## Method 2:GNB
+---
 
-[Your description of Method 2 following the same structure as Method 1]
+## Method 2: Gaussian Naive Bayes (GNB)
 
-## Method 3:SVM
+### Model formulation
+Gaussian Naive Bayes models the class-conditional distribution of each feature as Gaussian:
+\[
+p(x_j | y = c) = \frac{1}{\sqrt{2\pi\sigma_{jc}^2}} \exp\!\left(-\frac{(x_j - \mu_{jc})^2}{2\sigma_{jc}^2}\right),
+\]
+and applies Bayes’ rule assuming **conditional independence** between features:
+\[
+p(y|x) \propto p(y)\prod_{j=1}^d p(x_j|y).
+\]
+The predicted class is the one with the highest posterior probability.
 
-[Your description of Method 3 following the same structure as Method 1]
+### Theoretical properties and justification
+Despite the strong independence assumption, Naive Bayes often performs surprisingly well in practice, especially when features are only weakly correlated. It is simple, fast, and provides a strong probabilistic baseline. GNB is particularly effective when the class distributions are approximately normal and separable in feature space.
+
+### Implementation details
+Implemented via `method = "nb"` in **caret**, with preprocessing including **centering and scaling**. The algorithm estimates each feature’s mean and variance per class, then computes log-posterior probabilities for classification. No parameter tuning is typically needed, making it computationally efficient.
+
+---
+
+## Method 3: Support Vector Machine (SVM)
+
+### Model formulation
+A linear Support Vector Machine seeks the hyperplane \(w^\top x + b = 0\) that maximizes the margin between two classes:
+\[
+\min_{w,b} \frac{1}{2}\|w\|^2 + C \sum_{i=1}^n \max(0, 1 - y_i(w^\top x_i + b)),
+\]
+where \(C > 0\) balances margin width and classification error (hinge loss). The prediction function is
+\[
+f(x) = \text{sign}(w^\top x + b).
+\]
+
+### Theoretical properties and justification
+SVMs are **margin-based classifiers** that provide good generalization, especially in high-dimensional spaces. The hinge loss focuses on difficult cases (support vectors), making the classifier robust to noise and overfitting. A linear kernel is used here since the dataset is well-behaved and moderately dimensional.
+
+### Implementation details
+Implemented using `method = "svmLinear"` in **caret**, with **10-fold cross-validation**. Features were **centered and scaled** before training. The regularization parameter \(C\) was tuned automatically using internal resampling to optimize performance.
 
 
 ## Comparison framework
 
-[Your comparison framework here]
+To ensure a fair comparison, all models were trained using:
+- The **same 10-fold cross-validation** (`trainControl(method="cv", number=10)`),
+- The **same training/holdout splits**, and
+- The **same preprocessing pipeline** (centering and scaling).
 
+Performance metrics such as **Accuracy**, **AUC**, and **F1-score** will be compared across models and experimental setups (baseline, PCA, LDA). Statistical significance tests (e.g., paired *t*-tests on cross-validation results) may be applied to confirm whether performance differences are meaningful.
 
 # Discussion of results
 ## Overall performance
@@ -546,8 +611,11 @@ ggplot(pred_times_long, aes(x = Model, y = PredictionTime_sec, fill = Model)) +
 # Conclusions
 
 # References
+[1]: https://www.nepjol.info/index.php/nccsrj/article/view/75469?utm_source=chatgpt.com "Breast Cancer Prediction: A Comparative Study of Support Vector Machine and Logistic Regression | National College of Computer Studies Research Journal"
+[2]: https://arxiv.org/abs/2306.02449?utm_source=chatgpt.com "The Power Of Simplicity: Why Simple Linear Models Outperform Complex Machine Learning Techniques -- Case Of Breast Cancer Diagnosis"
+[3]: https://beei.org/index.php/EEI/article/view/4448/0?utm_source=chatgpt.com "Breast cancer detection: an effective comparison of different machine learning algorithms on the Wisconsin dataset | Hossin | Bulletin of Electrical Engineering and Informatics"
 
-Wolberg, W., Mangasarian, O., Street, N., & Street, W. (1993). Breast Cancer Wisconsin (Diagnostic) [Dataset]. UCI Machine Learning Repository. <https://doi.org/10.24432/C5DW2B>.
+  Wolberg, W., Mangasarian, O., Street, N., & Street, W. (1993). Breast Cancer Wisconsin (Diagnostic) [Dataset]. UCI Machine Learning Repository. <https://doi.org/10.24432/C5DW2B>.
 
 #A Additional results [Your additional results here if needed]
 
