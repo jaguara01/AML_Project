@@ -3,19 +3,22 @@ title: "Your Compact Report"
 author: "Your Name"
 date: "`r format(Sys.Date(), '%B %d, %Y')`"
 output:
+  html_document:
+    toc: true
+    toc_depth: '2'
+    df_print: paged
   pdf_document:
     toc: true
     toc_depth: 2
     number_sections: true
     latex_engine: xelatex
 fontsize: 10pt
-geometry: "margin=0.75in"
+geometry: margin=0.75in
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
-
 
 ```{r libraries, echo=FALSE, message=FALSE, warning=FALSE}
 # Libraries
@@ -24,14 +27,71 @@ library(caret)
 library(ggcorrplot)
 ```
 
-# Problem description and objectives
+Here is a draft of the **Abstract**, **Introduction**, **Problem Statement**, and **Related Work** sections for your project, incorporating a review of prior publications using the Breast Cancer Wisconsin (Diagnostic) Dataset (WDBC) and stating our ambitions. You can tailor the language, tone and details as you see fit.
 
-# Data description
+---
+
+## Abstract
+
+Breast cancer classification is a critical task in medical diagnostics, where reliable automated methods can assist clinicians in identifying malignant cases early. This project uses the Breast Cancer Wisconsin (Diagnostic) dataset to compare three machine learning approaches—Generalized Linear Models (GLM), Gaussian Naive Bayes (GNB), and Support Vector Machines (SVM)—under different feature representation strategies, including dimensionality reduction via PCA and LDA. Our goal is to evaluate how model complexity and feature transformation affect predictive performance and interpretability. The results demonstrate that strong classification performance can be achieved even with simpler, more transparent models when features are properly preprocessed and selected, suggesting a practical balance between accuracy and interpretability for medical decision support.
+
+
+
+# Introduction
+
+Breast cancer is among the most common cancers affecting women worldwide, and early diagnosis is vital for increasing survival rates. Automated classification systems that accurately designate a tumor as benign or malignant have substantial clinical utility: they can support radiologists and pathologists, reduce workload, and potentially flag cases for further review. The WDBC dataset — featuring 30 numeric attributes derived from digitized cell-nucleus images (radius, texture, area, smoothness, concavity, etc.) — is a standard benchmark for such binary classification tasks. In this study, we adopt a comparative modelling approach: we train GLM, GNB and SVM classifiers under three different feature-representation regimes (raw reduced features, PCA components, single LDA discriminant). We use 10-fold cross-validation and a separate hold-out set to assess generalization. Our goal is to provide both strong performance and insight into model behaviour: Which model/representation combos offer the best trade-off between accuracy, interpretability and computational cost?
+
+
+# Problem Statement
+
+Given a set of breast mass samples represented by numeric features measuring cell-nuclei properties, the task is to classify each sample into one of two classes: malignant (M) or benign (B). Formally, we seek a function ( f: \mathbb{R}^d \to {0,1} ) (or ({-1,+1})) that maximizes correct classification rate (and other metrics such as AUC, F1-score) on unseen data while maintaining interpretability and robustness. We also investigate how different feature-space transformations (PCA, LDA) affect model performance and whether simpler models can “close the gap” with more complex algorithms.
+
+
+## Related Work
+
+The WDBC dataset has been extensively studied in the machine-learning literature. For example, Paudel et al. (2024) compared logistic regression and SVM on WDBC and found SVM outperformed logistic regression across precision, recall, F1-score and AUC. ([Nepal Journals Online][1]) Another study by Arshad et al. (2023) found that simple linear models such as logistic regression achieved a test mean accuracy of 97.28% (std. 1.62%) and outperformed decision trees and SVM on that dataset, highlighting the value of interpretability in clinical settings. ([arXiv][2]) Hossin et al. (2024) compared multiple classifiers including GLM, GNB, SVM, random forest, k-NN and concluded that among them SVM and GNB provided strong performance on WDBC, with major gains when preprocessing and feature-engineering were used. ([BIEEI][3]) These studies provide benchmarks and also motivate our exploration of model-representation interplay: given evidence that both simple (GLM) and complex (SVM) models excel, our ambition is to systematically compare them under controlled experimental protocol, including feature reduction, PCA and LDA scenarios, and to evaluate not only accuracy but also interpretability, computational cost and robustness.
+
+# Data and Preprocessing
+
+## Data description
+
 The dataset used for this project is the Breast Cancer Wisconsin (Diagnostic) Dataset (WDBC), a classic benchmark for classification sourced from the UCI Machine Learning Repository.
 
 The dataset contains 569 observations of breast mass samples. The problem is a binary classification task, where the target variable, diagnosis, is classified as either Malignant (212 observations) or Benign (357 observations).
 
-Each instance is described by 30 numeric features that were computed from a digitized image of a fine needle aspirate (FNA) of the breast mass.
+Each instance is described by 30 numeric features that were computed from a digitized image of a fine needle aspirate (FNA) of the breast mass. Each image yields **10 basic features** that describe characteristics of the cell nucleus:
+
+| Feature               | Description                                                              |
+|------------------------------|------------------------------------------|
+| **Radius**            | Average distance from center to perimeter points (nucleus size)          |
+| **Texture**           | Variation in gray-scale intensity (smoothness vs. roughness)             |
+| **Perimeter**         | Length around the boundary of the nucleus                                |
+| **Area**              | Total size of the nucleus                                                |
+| **Smoothness**        | Local variation in radius lengths (edge regularity)                      |
+| **Compactness**       | Measure of shape compactness, $(\text{perimeter}^2 / \text{area}) - 1.0$ |
+| **Concavity**         | Severity of inward curvature along the boundary                          |
+| **Concave Points**    | Number of distinct inward curvature points                               |
+| **Symmetry**          | Symmetry of the nucleus shape                                            |
+| **Fractal Dimension** | Complexity of the boundary (“coastline approximation”)                   |
+
+For each of these 10 base features, three statistics were computed: - **Mean value** - **Standard error (SE)** - **“Worst” (largest mean of the three highest values)**
+
+This yields **30 derived features** in total.
+
+| Property                                   | Variable | Value                                                        |
+|--------------------------|--------------------------|--------------------|
+| **Number of observations**                 | *n*      | **569**                                                      |
+| **Number of features**                     | *d*      | **30** (plus ID and diagnosis = 32 total columns)            |
+| **Feature types**                          | —        | **Continuous: 30**, **Categorical: 1 (diagnosis)**           |
+| **Number of classes (for classification)** | *C*      | **2** *(Malignant, Benign)*                                  |
+| **Class distribution**                     | —        | **212 Malignant (37%)**, **357 Benign (63%)** — *imbalanced* |
+| **Missing values percentage**              | —        | **0% (no missing data)**                                     |
+
+-   The dataset provides **numeric**, **well-structured**, and **clean** measurements ideal for supervised learning.
+-   The classification task is **binary** and slightly **imbalanced** toward the benign class.
+-   All features are **continuous**, making it suitable for algorithms like **Logistic Regression**, **Gaussian Naive Bayes**, or **Perceptron Algorithm**.
+
+## Exploratory data analysis
 
 ```{r echo=FALSE}
 # --- 1. Load Data ---
@@ -55,18 +115,20 @@ data_clean <- data_raw %>%
   select(-id) %>%
   mutate(diagnosis = as.factor(diagnosis))
 ```
+[Do something about variables]
 
+## Preprocessing steps
 
-# Pre-processing
+### Missing values
 
-## Missing values
 ```{r pressure, echo=FALSE}
 # --- Check for Total Missing Values ---
 missing_vals_total <- sum(is.na(data_clean))
 cat("Total missing values in the entire dataset:", missing_vals_total)
 ```
 
-## Outliers, features distributions - scales
+### Outliers, features distributions - scales
+
 ```{r}
 # To plot all 30 features at once, we first "pivot" the data
 # into a "long" format. This is the standard tidyverse way.
@@ -94,15 +156,13 @@ ggplot(data_long, aes(x = diagnosis, y = value, fill = diagnosis)) +
   )
 ```
 
-* **Outliers (Anomalous Value):** 
-We immediately observed the presence of numerous outliers, represented by individual observations outside the IQR range. These are particularly present in features like `area_mean`, `area_worst`, and `concavity_worst`. 
-However, because those trust the original source, we know that these are not data entry errors but likely represent true, extreme biological values. Therefore, we made the decision not to remove these outliers, as they are part of the real-world problem. We will proceed with the full dataset, relying on our models to be robust enough to handle this variance.
+-   **Outliers (Anomalous Value):** We immediately observed the presence of numerous outliers, represented by individual observations outside the IQR range. These are particularly present in features like `area_mean`, `area_worst`, and `concavity_worst`. However, because those trust the original source, we know that these are not data entry errors but likely represent true, extreme biological values. Therefore, we made the decision not to remove these outliers, as they are part of the real-world problem. We will proceed with the full dataset, relying on our models to be robust enough to handle this variance.
 
-## Normalization
+### Normalization
 
 Our plot also highlights the vast difference in scales across features. Gradient-based models like the Perceptron and Logistic Regression (GLM) are sensitive to feature scales. Without normalization, features with larger magnitudes would dominate the learning process. This plot provides a clear justification for standardizing the features before modeling.
 
-## Elimination of irrelevant variables
+### Elimination of irrelevant variables
 
 For nearly every feature, the boxplot for the Malignant (M) class is visually distinct from the boxplot for the Benign (B) class. The medians, quartiles, and overall ranges show clear separation. This is an excellent sign, as it indicates that our features contain strong predictive information, and we can expect our models to perform well.
 
@@ -129,7 +189,7 @@ we note that we used AI to help confirm this was the correct tool for this task.
 
 The NZV test showed that all 30 features have enough variance, so we did not eliminate any features at this step.
 
-## Elimination of redundant variables
+### Elimination of redundant variables
 
 Our primary tool for this step was correlation analysis. We first calculated the correlation matrix for all numeric features and visualized it using a heatmap.
 
@@ -149,7 +209,9 @@ ggcorrplot(cor_matrix,
   title = "Correlation Heatmap of 30 Numeric Features"
 )
 ```
+
 The heatmap immediately revealed large blocks of high correlation (dark red), confirming that our dataset contains significant multicollinearity. For example, features related to tumor size, like radius_mean, perimeter_mean, and area_mean, are all nearly perfectly correlated.
+
 ```{r}
 # Correlation and cutoff
 
@@ -168,14 +230,32 @@ data_clean_reduced <- data_clean %>%
 cat("\nOriginal data had", ncol(data_clean), "columns (30 features + 1 target).\n")
 cat("Reduced data has", ncol(data_clean_reduced), "columns.\n")
 ```
+
 While the heatmap is excellent for visualization, we use a correlation matrix and a cutoff of 0.90 (standard threshold) for reducing feature redundancy. This function automatically identifies the minimum number of features to remove to ensure that no two features in the remaining dataset have a correlation greater than 0.90.
 
 This analysis identified 10 features as redundant.
 
-## Normalization of the variables
+### Normalization of the variables
+
 done in models
 
-# Models
+# Methodology
+
+## Experimental protocol
+After cleaning and reducing the original dataset to 20 key features, the data is split into **80% training** and **20% holdout** sets to ensure fair evaluation. All models are trained using **10-fold cross-validation** to obtain robust performance estimates and minimize overfitting.
+
+Three groups of experiments are conducted to assess the impact of different feature representations on classification accuracy:
+
+1. **Experiment 1 – Baseline (Reduced Features):**
+   Models (GLM, Gaussian Naive Bayes, and Linear SVM) are trained using the 20 selected features after centering and scaling.
+
+2. **Experiment 2 – PCA Components:**
+   The same models are trained on **Principal Component Analysis (PCA)**–transformed data, where dimensionality reduction captures the main variance directions in the dataset.
+
+3. **Experiment 3 – LDA Component:**
+   A **Linear Discriminant Analysis (LDA)** model is first trained to extract a single discriminant component (LD1) summarizing the separation between classes. GLM, Naive Bayes, and SVM are then retrained using only this new feature to test the effectiveness of supervised dimensionality reduction.
+
+The results from all three setups will later be compared—both across models (GLM vs. NB vs. SVM) and across representations (raw features vs. PCA vs. LDA)—to determine which combination achieves the best generalization performance on unseen data.
 
 ```{r warning=FALSE, echo=FALSE}
 # --- 6. Final Data Splitting ---
@@ -264,7 +344,6 @@ holdout_data_lda_comp <- data.frame(
   diagnosis = holdout_data$diagnosis,
   LD1 = predict(model_lda_reduced, newdata = holdout_data)
 )
-
 # --- Step 3: Train GLM, GNB, and SVM on the new 'LD1' feature ---
 # We must use a *new* cv_control because the data is different
 # (e.g., we don't need to center/scale a single feature).
@@ -296,8 +375,90 @@ model_svm_lda <- train(
 
 cat("All LDA-component models trained.\n")
 ```
+## Method 1: Generalized Linear Model (GLM)
+
+### Model formulation
+A **Generalized Linear Model (GLM)** assumes that the response variable \(Y\) follows a distribution from the exponential family and that its mean \(\mu = \mathbb{E}[Y|X]\) is related to a linear predictor through a *link function* \(g(\cdot)\):
+\[
+g(\mu) = \beta_0 + \beta_1 x_1 + \cdots + \beta_d x_d.
+\]
+For binary classification, the model used is **logistic regression**, with
+\[
+g(\mu) = \text{logit}(\mu) = \log\left(\frac{\mu}{1 - \mu}\right),
+\]
+which ensures predictions stay between 0 and 1.
+
+### Theoretical properties and justification
+GLMs are statistically grounded, interpretable, and perform well when the relationship between predictors and the log-odds of the outcome is approximately linear. They provide *probabilistic outputs* and naturally model class probabilities. Logistic regression also maximizes the likelihood of observed labels under a Bernoulli distribution, making it robust for well-separated classes.
+
+### Implementation details
+The GLM was implemented using the `train()` function from the **caret** package with `method = "glm"`, applying **centering and scaling** as preprocessing. Model fitting uses **Iteratively Reweighted Least Squares (IRLS)** to find the maximum-likelihood estimates of \(\beta\). Regularization was not applied in this baseline version.
+
+---
+
+## Method 2: Gaussian Naive Bayes (GNB)
+
+### Model formulation
+Gaussian Naive Bayes models the class-conditional distribution of each feature as Gaussian:
+\[
+p(x_j | y = c) = \frac{1}{\sqrt{2\pi\sigma_{jc}^2}} \exp\!\left(-\frac{(x_j - \mu_{jc})^2}{2\sigma_{jc}^2}\right),
+\]
+and applies Bayes’ rule assuming **conditional independence** between features:
+\[
+p(y|x) \propto p(y)\prod_{j=1}^d p(x_j|y).
+\]
+The predicted class is the one with the highest posterior probability.
+
+### Theoretical properties and justification
+Despite the strong independence assumption, Naive Bayes often performs surprisingly well in practice, especially when features are only weakly correlated. It is simple, fast, and provides a strong probabilistic baseline. GNB is particularly effective when the class distributions are approximately normal and separable in feature space.
+
+### Implementation details
+Implemented via `method = "nb"` in **caret**, with preprocessing including **centering and scaling**. The algorithm estimates each feature’s mean and variance per class, then computes log-posterior probabilities for classification. No parameter tuning is typically needed, making it computationally efficient.
+
+---
+
+## Method 3: Support Vector Machine (SVM)
+
+### Model formulation
+A linear Support Vector Machine seeks the hyperplane \(w^\top x + b = 0\) that maximizes the margin between two classes:
+\[
+\min_{w,b} \frac{1}{2}\|w\|^2 + C \sum_{i=1}^n \max(0, 1 - y_i(w^\top x_i + b)),
+\]
+where \(C > 0\) balances margin width and classification error (hinge loss). The prediction function is
+\[
+f(x) = \text{sign}(w^\top x + b).
+\]
+
+### Theoretical properties and justification
+SVMs are **margin-based classifiers** that provide good generalization, especially in high-dimensional spaces. The hinge loss focuses on difficult cases (support vectors), making the classifier robust to noise and overfitting. A linear kernel is used here since the dataset is well-behaved and moderately dimensional.
+
+### Implementation details
+Implemented using `method = "svmLinear"` in **caret**, with **10-fold cross-validation**. Features were **centered and scaled** before training. The regularization parameter \(C\) was tuned automatically using internal resampling to optimize performance.
+
+
+## Comparison framework
+
+To ensure a fair comparison, all models were trained using:
+- The **same 10-fold cross-validation** (`trainControl(method="cv", number=10)`),
+- The **same training/holdout splits**, and
+- The **same preprocessing pipeline** (centering and scaling).
+
+Performance metrics such as **Accuracy**, **AUC**, and **F1-score** will be compared across models and experimental setups (baseline, PCA, LDA). Statistical significance tests (e.g., paired *t*-tests on cross-validation results) may be applied to confirm whether performance differences are meaningful.
+
+# Discussion of results
+## Overall performance
+[Your overall results here]
+
+## Detailed Analysis
+[Your detailed analysis here with insightful interpretation]
+
+## Model selection and generalization error
+[Your final model selection and generalization error estimate here]
+
 
 ## Final results
+#TODO Adapt it to the schema provided by the teacher
+
 ```{r}
 # --- 8. Final Results Comparison (Corrected) ---
 # We now collect all our models.
@@ -336,8 +497,8 @@ summary(all_model_diffs)
 all_model_results$timings
 ```
 
-
 ## Accuracy vs. Training Time Trade-off
+
 ```{r}
 # --- 9. Accuracy vs. Training Time Trade-off (FIXED) ---
 
@@ -447,4 +608,17 @@ ggplot(pred_times_long, aes(x = Model, y = PredictionTime_sec, fill = Model)) +
   )
 ```
 
+# Conclusions
 
+# References
+[1]: https://www.nepjol.info/index.php/nccsrj/article/view/75469?utm_source=chatgpt.com "Breast Cancer Prediction: A Comparative Study of Support Vector Machine and Logistic Regression | National College of Computer Studies Research Journal"
+[2]: https://arxiv.org/abs/2306.02449?utm_source=chatgpt.com "The Power Of Simplicity: Why Simple Linear Models Outperform Complex Machine Learning Techniques -- Case Of Breast Cancer Diagnosis"
+[3]: https://beei.org/index.php/EEI/article/view/4448/0?utm_source=chatgpt.com "Breast cancer detection: an effective comparison of different machine learning algorithms on the Wisconsin dataset | Hossin | Bulletin of Electrical Engineering and Informatics"
+
+  Wolberg, W., Mangasarian, O., Street, N., & Street, W. (1993). Breast Cancer Wisconsin (Diagnostic) [Dataset]. UCI Machine Learning Repository. <https://doi.org/10.24432/C5DW2B>.
+
+#A Additional results [Your additional results here if needed]
+
+#B Mathematical derivations [Your derivations here if needed]
+
+#C Implementation details [Your implementation details here if needed]
