@@ -1,0 +1,540 @@
+\documentclass[a4paper,10pt]{article}
+
+%% Language and font encodings
+\usepackage[english]{babel}
+\usepackage[utf8x]{inputenc}
+\usepackage[T1]{fontenc}
+
+%% Sets page size and margins
+\usepackage[a4paper,top=3cm,bottom=2cm,left=3cm,right=3cm,marginparwidth=1.75cm]{geometry}
+
+%% Useful packages for scientific writing
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{graphicx}
+\usepackage{booktabs} % for professional tables
+\usepackage{algorithm}
+\usepackage{algorithmic}
+\usepackage[colorlinks=true, allcolors=blue]{hyperref}
+\usepackage{cleveref} % for smart cross-references
+
+%% Theorem environments
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{corollary}[theorem]{Corollary}
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{Definition}
+\newtheorem{assumption}[theorem]{Assumption}
+\theoremstyle{remark}
+\newtheorem{remark}[theorem]{Remark}
+
+%% Title information
+\title{Project nº [1/2/3]: [Your Project Title]\\
+    Advanced Machine Learning (MDS)}
+
+\author{Student Name 1 \and Student Name 2}
+
+\date{Date: }
+
+\begin{document}
+    
+    \maketitle
+    
+    \begin{abstract}
+%     GUIDANCE: The abstract should be a single paragraph (150-250 words) that concisely summarizes:
+%     (1) The problem you are addressing and its motivation
+%     (2) The main methods/techniques you applied (from the corresponding course part)
+%     (3) The key results or findings
+%
+%     Write this LAST, after completing the rest of the report.
+%     Example structure: "We address the problem of... using methods from Part [I/II/III] of the course, specifically... Our experimental results show that... We conclude that..." or ``we prove that ...''
+        
+      [Your abstract here]
+    \end{abstract}
+        
+    \section{Introduction}
+    \label{sec:introduction}
+    
+%    GUIDANCE: The introduction should provide context and motivation for your work. Include:
+%     
+%    (1) The problem you are addressing: what is it, why is it important or interesting?
+%    (2) Brief background: what makes this problem challenging?
+%    (3) Your approach: what methods from the course are you applying? (mention Part I/II/III)
+%    (4) Main contributions: what do you accomplish in this work?
+%    (5) Structure: briefly outline the rest of the document ("The rest of this report is organized as follows...")
+%    
+%    DO NOT include general explanations of machine learning or techniques covered in class.
+%    Focus on YOUR specific problem and approach.
+    
+    [Your introduction here. Start with the problem and its motivation. Then describe your approach and main findings.]
+    
+    \section{Problem statement}
+    \label{sec:problem}
+    
+    % GUIDANCE: 
+    
+    % (1) Clearly define what you are trying to accomplish
+    % (2) Use mathematical notation appropriately but concisely.
+    % (3) Make sure notation is clear
+    
+    %[Formal problem statement here]
+    
+    \section{Related Work}
+    \label{sec:related}
+    
+    % GUIDANCE:   
+    
+    % (1) Brief description of relevant previous work on this problem or dataset
+    % (2) How your work relates to or differs from previous approaches
+    % (3) What you adopt or improve upon from related work
+    
+    % DO NOT copy/paste from papers - synthesize and cite properly!
+    
+    % EXAMPLE ALGORITHM IN PSEUDOCODE (adapt or remove, use for all algorithms throughout the work)
+    % DO NOT display trivial non-informative pseudocode and make it match the notation used in the text
+    
+    \begin{algorithm}
+        \caption{Algorithm name}
+        \label{alg:example}
+        \begin{algorithmic}[1]
+            \REQUIRE Input data $X$, parameters $\theta_0$
+            \ENSURE Optimized parameters $\theta^*$
+            \STATE Initialize $\theta \leftarrow \theta_0$
+            \WHILE{not converged}
+            \STATE Compute gradient $g \leftarrow \nabla_\theta L(\theta)$
+            \STATE Update $\theta \leftarrow \theta - \alpha g$
+            \ENDWHILE
+            \RETURN $\theta$
+        \end{algorithmic}
+    \end{algorithm}
+    
+     %   [Your related work discussion here]
+    
+    \section{Data and Preprocessing}
+    \label{sec:data}
+    
+    % GUIDANCE: Describe your data and all preprocessing steps, or omit this section entirely if not applicable. This section should be thorough because preprocessing significantly impacts results.
+    
+    \subsection{Data description}
+    \label{sec:data-description}
+    
+    % GUIDANCE: Describe the dataset(s) you are using, omit if not applicable.
+    
+%    Source: where did you obtain it? (cite properly)
+%    Size: number of observations, features, classes (if classification)
+%    Nature of features: continuous, categorical, mixed?
+%    Domain: what does the data represent? What is the application context?
+%    Known challenges: class imbalance, missing values, noise?
+%    
+%    A well-formatted table summarizing dataset characteristics is very useful here. \emph{See the project guide for more details}.
+    
+    [Your data description here]
+    
+    % EXAMPLE TABLE (remove this comment and adapt):
+    
+    \begin{table}[ht]
+        \centering
+        \caption{Dataset characteristics: add/remove rows if needed; replace the '?'s by the corresponding values}
+        \label{tab:dataset}
+        \begin{tabular}{@{}lll@{}}
+            \toprule
+            \textbf{Property} & \textbf{Variable} & \textbf{Value} \\
+            \midrule
+            Number of observations & $n$ & ? \\
+            Number of features & $d$ & NA \\
+            Feature types & continuous, categorical & ?/?/ ... \\
+            Number of classes & $C$ (for classification) & ? \\
+            Class distribution & balanced/imbalanced & ?/?/.. \\
+            Missing values & percentage & ? \\
+            \bottomrule
+        \end{tabular}
+    \end{table}
+    
+    \subsection{Exploratory data analysis}
+    \label{sec:eda}
+    
+    % GUIDANCE: Describe your initial exploration of the data:
+    
+    % (1) Visualization of key features or relationships
+    % (2) Identification of patterns, outliers, correlations
+    % (3) Insights gained that inform preprocessing or modeling decisions
+    %
+    % IMPORTANT: Every figure must have a caption and be referenced and discussed in the text.
+        
+    % EXAMPLE FIGURE (remove this comment and adapt):
+    
+    % \begin{figure}[ht]
+        % \centering
+        % \includegraphics[width=0.7\textwidth]{figures/correlation_matrix.pdf}
+        % \caption{Correlation matrix of continuous features. We observe strong correlation between features X and Y, suggesting potential redundancy.}
+        % \label{fig:correlation}
+    % \end{figure}
+    
+    \subsection{Preprocessing steps}
+    \label{sec:preprocessing}
+    
+    % GUIDANCE: Document ALL preprocessing steps in detail. For each step, explain:
+    
+    % (1) WHAT you did
+    % (2) WHY you did it (justify based on data characteristics or method requirements)
+    % (3) HOW you did it (be specific about techniques used)
+    %
+    % Common preprocessing steps to address (as applicable):
+    % - Missing value treatment: deletion, imputation (mean, median, model-based)? Justify choice.
+    % - Outlier treatment: detection method? removal or transformation?
+    % - Feature scaling/normalization: standardization, min-max? Why needed for your methods?
+    % - Encoding categorical variables: one-hot, label encoding, target encoding? Why?
+    % - Feature selection: filter, wrapper, embedded methods? Criteria used?
+    % - Feature extraction: PCA, domain-specific transformations?
+    % - Class imbalance: over/undersampling, class weights, posterior probabilities?
+        
+    \section{Methodology}
+    \label{sec:methodology}
+    
+    % GUIDANCE: This is typically the longest section (2-3 pages). Describe all methods you applied
+    % from the corresponding course part. For each method:
+    
+    % (1) Brief description: what is the method and its key properties?
+    % (2) Why chosen: justify based on problem characteristics and theoretical properties
+    % (3) Mathematical formulation: present the key equations precisely
+    % (4) Implementation details: hyperparameters, optimization algorithm, convergence criteria
+    % (5) Theoretical properties: discuss relevant theoretical results (e.g., universal approximation,
+    %     consistency, convergence guarantees, computational complexity)
+    %
+    % Balance completeness with conciseness - you don't need to re-derive results from class, but you must demonstrate understanding.
+    
+    \subsection{Experimental protocol}
+    \label{sec:protocol}
+    
+    % GUIDANCE: Describe your overall experimental setup BEFORE describing individual methods:
+    %
+    % (1) Data splitting: training/validation/test split? Cross-validation? Ratios?
+    % (2) Performance metrics: which metrics and why? (accuracy, F1, AUC, RMSE, etc.)
+    % (3) Hyperparameter tuning: method used (grid search, random search)? Search space?
+    % (4) Statistical significance: how do you assess if differences are significant?
+    % (5) Computational environment: hardware, software versions (for reproducibility)
+    %
+    % CRITICAL (resampling): Explain how you avoid data leakage (preprocessing fit on training set only,
+    % applied to validation/test sets). This is essential for methodological rigor.
+
+    
+    [Your experimental protocol here]
+    
+    \subsection{Method 1: [Method name]}
+    \label{sec:method1}
+    
+    % GUIDANCE: For each method you apply, include:
+    
+    \subsubsection{Model formulation}
+    
+     % GUIDANCE: Present the mathematical formulation precisely. Use proper notation.
+     %State the objective function, constraints, and key equations.
+     
+     For example, for a GLM, present the likelihood and regularized objective.
+    
+     %EXAMPLE (adapt to your method):
+     The model minimizes the regularized empirical risk:
+     \begin{equation}
+         \hat{\theta} = \arg\min_{\theta \in \Theta} \left\{ \frac{1}{n}\sum_{i=1}^n \ell(y_i, f(x_i; \theta)) + \lambda R(\theta) \right\}
+         \label{eq:objective}
+         \end{equation}
+     where $\ell$ is the loss function, $f(\cdot; \theta)$ is the prediction function, 
+     $R(\theta)$ is the regularization term, and $\lambda > 0$ controls regularization strength. Recommended level of description:
+     
+     \begin{description}
+         \item[one paragraph] for MLAs seen in class
+         \item[half page] for MLAs not seen in class but mentioned
+         \item[up to you] for MLAs not seen in class or own work
+     \end{description}
+    
+    [Your mathematical formulation here]
+    
+    \subsubsection{Theoretical properties and justification}
+    
+    % GUIDANCE: Discuss relevant theoretical properties:
+    
+    % - Why is this method appropriate for your problem?
+    % - What assumptions does it make? Are they satisfied in your data?
+    % - What theoretical guarantees exist? (consistency, convergence, approximation error bounds)
+    % - Computational complexity?
+    % - Expected behavior on your problem type?
+    %
+    % This demonstrates theoretical rigor and deep understanding.
+    
+    [Your theoretical discussion here]
+    
+    \subsubsection{Implementation details}
+    
+    % GUIDANCE: Provide specific details needed for reproducibility:
+    
+    % - Software/library used (with version)
+    % - Hyperparameters: which ones tuned? Search space? Final values?
+    % - Optimization algorithm: which one? Convergence criteria? Learning rate schedule?
+    % - Initialization: random? specific strategy?
+    % - Any implementation choices or modifications
+    %
+    % Can be formatted as a table for clarity.
+    
+    [Your implementation details here]
+    
+    % EXAMPLE TABLE (adapt):
+    \begin{table}[ht]
+        \centering
+        \caption{Hyperparameters for Method 1}
+        \label{tab:hyper-method1}
+        \begin{tabular}{@{}lll@{}}
+            \toprule
+            \textbf{Hyperparameter} & \textbf{Search space} & \textbf{Best value} \\
+            \midrule
+            Regularization $\lambda$ & $\{10^{-4}, 10^{-3}, \ldots, 10^2\}$ & $10^{-2}$ \\
+            Learning rate & $\{0.001, 0.01, 0.1\}$ & $0.01$ \\
+            \bottomrule
+        \end{tabular}
+    \end{table}
+    
+    \subsection{Method 2: [Method name]}
+    \label{sec:method2}
+    
+    % GUIDANCE: Repeat the structure above for each method you apply.
+    % Compare at least 2 methods from the corresponding course part.
+    
+    [Your description of Method 2 following the same structure as Method 1]
+    
+    \subsection{Comparison framework}
+    \label{sec:comparison}
+    
+    % GUIDANCE: Explain how you will compare the methods:
+    
+    % (1) Which metrics for comparison?
+    % (2) How do you assess statistical significance of differences?
+    % (3) What dimensions of comparison? (accuracy, interpretability, training time, robustness)
+    % (4) Fairness of comparison: same data, same preprocessing, same tuning effort?
+    
+    [Your comparison framework here]
+    
+    % PROJECT-SPECIFIC NOTES:
+    
+    % - Project 1: Compare discriminative vs. generative approaches; discuss Bayesian interpretation
+    % - Project 2: Compare neural vs. kernel methods; discuss primal-dual relationships if applicable
+    % - Project 3: Compare advanced methods with simpler baselines from earlier parts; discuss theoretical connections (e.g., deep networks and NTK)
+    
+   \section{Discussion of results}
+   \label{sec:discussion}
+    
+    % GUIDANCE: Present and interpret your results. This section should be evidence-based and analytical.
+    
+    % Structure: present results, then analyze/interpret them.
+    % Length: 2-2.5 pages
+    
+    \subsection{Overall performance}
+    \label{sec:overall}
+    
+    % GUIDANCE: Present the main results comparing all methods:
+    %
+    % (1) Performance metrics for all methods (table)
+    % (2) Statistical significance of differences
+    % (3) Which method performed best? By how much?
+    % (4) Training times and computational costs
+    %
+    % IMPORTANT: Every table and figure must be discussed in the text. Don't just present
+    % numbers - interpret them.
+    
+    [Your overall results here]
+    
+    % EXAMPLE TABLE (adapt):
+    \begin{table}[ht]
+        \centering
+        \caption{Performance comparison of methods on test set. Results shown as mean $\pm$ standard deviation over 5-fold cross-validation. Bold indicates best performance.}
+        \label{tab:results}
+        \begin{tabular}{@{}lcccc@{}}
+            \toprule
+            \textbf{Method} & \textbf{Accuracy} & \textbf{F1-score} & \textbf{AUC} & \textbf{Training time (s)} \\
+            \midrule
+            Method 1 & $0.85 \pm 0.02$ & $0.83 \pm 0.03$ & $0.90 \pm 0.02$ & $15.3$ \\
+            Method 2 & $\mathbf{0.88 \pm 0.02}$ & $\mathbf{0.86 \pm 0.02}$ & $\mathbf{0.92 \pm 0.01}$ & $127.8$ \\
+            \bottomrule
+        \end{tabular}
+    \end{table}
+    
+    \subsection{Detailed analysis}
+    \label{sec:detailed}
+ 
+    % GUIDANCE: Provide deeper analysis of results:
+    
+    % (1) Why did certain methods perform better/worse? Connect to theoretical properties and data characteristics
+    % (2) Error analysis: which examples were misclassified? Any patterns?
+    % (3) Sensitivity analysis: how sensitive are results to hyperparameters?
+    % (4) Behavior during training: convergence plots, learning curves
+    % (5) Interpretability: what did the models learn? Feature importance, decision boundaries?
+    %
+    % Use visualizations effectively (learning curves, confusion matrices, feature importance plots, etc.)
+    % CRITICAL: Go beyond surface observations. Provide insightful analysis connecting theory to practice.
+    
+    [Your detailed analysis here with insightful interpretation]
+    
+    % EXAMPLE FIGURE (adapt):
+    % \begin{figure}[ht]
+        % \centering
+        % \includegraphics[width=0.8\textwidth]{figures/learning_curves.pdf}
+        % \caption{Learning curves showing training and validation accuracy vs. training set size. Both methods show good generalization with small gap between training and validation curves. Method 2 benefits more from additional data, consistent with its higher capacity.}
+        % \label{fig:learning}
+        % \end{figure}
+    
+    \subsection{Model selection and generalization error}
+    \label{sec:final-model}
+    
+    % GUIDANCE: Select and justify your final model:
+    % (1) Which method/configuration do you select as final model? Why?
+    % (2) What is your estimate of generalization error? (on held-out test set)
+    % (3) Confidence intervals or error bars?
+    % (4) Is the model ready for deployment? Limitations?
+    
+    [Your final model selection and generalization error estimate here]
+    
+    \section{Conclusions}
+    \label{sec:conclusions}
+    
+    % GUIDANCE: Synthesize your findings and reflect on the work.
+    
+    % (do NOT simply REPEAT the Abstract):
+    %
+    %    (1) Restate the problem and your approach (briefly)
+    %    (2) What are the main findings? Which methods worked best? Why?
+    %    (3) What insights did you gain about the problem or the methods?
+    %    (4) Reflect on theoretical aspects
+    %    (5) Limitations and future work
+    %    (6) Reflect on what you learned
+    
+    \bibliographystyle{plain}
+    \bibliography{references}
+    
+    % GUIDANCE ON REFERENCES:
+    % - Use a .bib file for references (see references.bib template below)
+    % - Cite all sources properly: papers, datasets, software packages
+    % - Include at least a few references to establish context (related work, methods used)
+    % - For datasets from repositories, cite the original source AND the repository
+    % - For software packages, cite the paper if available, otherwise the documentation/URL
+    % - For ChatGPT or similar tools, see: https://libguides.gettysburg.edu/citation/gen-ai
+    
+    % EXAMPLE .bib entries (create a separate references.bib file):
+    % @article{author2020,
+        %   author = {Author, A. and Author, B.},
+        %   title = {Title of the paper},
+        %   journal = {Journal Name},
+        %   volume = {10},
+        %   pages = {1--20},
+        %   year = {2020}
+        % }
+    %
+    % @misc{dataset2020,
+        %   author = {Creator, C.},
+        %   title = {Dataset name},
+        %   year = {2020},
+        %   howpublished = {\url{https://...}}
+        % }
+    
+    \appendix
+    
+    \section{Additional results}
+    \label{app:additional}
+    
+    % GUIDANCE: Use appendices for supplementary material that is important but would clutter
+    % the main text. Examples:
+    % - Additional experimental results or ablation studies
+    % - Detailed derivations or proofs
+    % - Additional visualizations
+    % - Hyperparameter sensitivity analysis details
+    % - Extended tables
+    %
+    % IMPORTANT: 
+    % - Appendices DO NOT count toward the 10-page limit
+    % - But don't use appendices to circumvent the page limit - main results should be in main text
+    % - Reference appendix sections from main text when relevant
+    
+    [Your additional results here if needed]
+    
+    \section{Mathematical derivations}
+    \label{app:derivations}
+    
+    % GUIDANCE: If you have detailed mathematical derivations that are important but too long
+    % for the main text, include them here. Examples:
+    
+    % - Derivation of gradients for custom loss functions
+    % - Proof of equivalence between formulations
+    % - Derivation of dual problem from primal
+    %
+    % Use proper theorem/proof environments:
+    
+    % EXAMPLE (adapt or remove):
+    \begin{lemma}
+        State your lemma here with precise mathematical notation.
+    \end{lemma}
+    
+    \begin{proof}
+        Provide detailed proof here.
+    \end{proof}
+    
+    % GUIDANCE ON MATHEMATICAL PRESENTATION:
+    
+    % - Use consistent notation throughout (define notation clearly in main text)
+    % - Number important equations for reference
+    % - Use proper mathematical environments (\begin{equation}, \begin{align}, etc.)
+    % - Use theorem/lemma/proposition environments for formal statements
+    % - Be rigorous but clear - explain the intuition alongside formal statements
+            
+    [Your derivations here if needed]
+            
+    \section{Implementation Details}
+    \label{app:implementation}
+            
+            % GUIDANCE: Additional implementation details that might be useful but too technical for main text:
+            
+            % - Pseudocode for (additional) complex algorithms
+            % - Architecture diagrams
+            % - Detailed hyperparameter search results
+            % - Convergence analysis details
+            % - Important information about the code or the hardware used
+            % - Remember full code goes in SEPARATE FILES
+            % - ...
+            
+            [Your implementation details here if needed]
+                       
+        \end{document}
+        
+        % ============================================================================
+        % GENERAL GUIDELINES FOR USING THIS TEMPLATE:
+        %    see the pdf guide for additional information
+        % ============================================================================
+        %
+        % 1. REMOVE ALL GUIDANCE COMMENTS before submitting (comments starting with %)
+        %
+        % 2. ADAPT STRUCTURE to your specific project - not all sections may be needed
+        %    If your work is purely THEORETICAL, feel free to make any changes you need
+        %
+        % 3. MAINTAIN RIGOR: 
+        %    - Use precise mathematical notation
+        %    - State assumptions clearly
+        %    - Justify all choices
+        %    - Connect theory to practice
+        %
+        % 4. BE CONCISE but COMPLETE:
+        %    - 10-page limit is strict for main text
+        %    - Every sentence should add value
+        %    - Use appendices for supplementary material
+        %
+        % 5. FIGURES AND TABLES:
+        %    - Every figure/table must be referenced in text
+        %    - Every figure/table must have informative caption
+        %    - Explain what the reader should observe
+        %
+        % 6. REPRODUCIBILITY:
+        %    - Provide enough detail that someone could reproduce your work
+        %    - Document all hyperparameters, software versions, random seeds
+        %
+        % 7. PROOFREAD:
+        %    - Check for grammar and spelling errors
+        %    - Ensure consistent notation
+        %    - Verify all cross-references work
+        %    - Make sure bibliography is complete and properly formatteds
+        %
+        % ============================================================================
