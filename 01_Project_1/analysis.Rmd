@@ -257,6 +257,36 @@ Three groups of experiments are conducted to assess the impact of different feat
 
 The results from all three setups will later be compared—both across models (GLM vs. NB vs. SVM) and across representations (raw features vs. PCA vs. LDA)—to determine which combination achieves the best generalization performance on unseen data.
 
+
+```{r custom_summary_function, echo=FALSE}
+# Load this library in your main 'libraries' chunk
+library(MLmetrics) 
+
+# This function calculates all the metrics we need
+modelSummary <- function(data, lev, model) {
+  
+  # 1. Get Accuracy (from defaultSummary)
+  #    Requires data$pred and data$obs
+  acc_val <- defaultSummary(data, lev, model)["Accuracy"]
+  
+  # 2. Get AUC (ROC) (from twoClassSummary)
+  #    Requires class probabilities (e.g., data$M and data$B)
+  roc_val <- twoClassSummary(data, lev, model)["ROC"]
+  
+  # 3. Get F1-Score
+  #    Requires data$pred and data$obs
+  #    We must ensure the "positive" class is 'M' (Malignant)
+  f1_val <- F1_Score(y_true = data$obs, 
+                     y_pred = data$pred, 
+                     positive = "M") # Assumes 'M' is your positive class
+  
+  # 4. Name and return the vector of results
+  c(Accuracy = acc_val, 
+    ROC = roc_val, 
+    F1 = f1_val)
+}
+```
+
 ```{r warning=FALSE, echo=FALSE}
 # --- 6. Final Data Splitting ---
 # We will use our *reduced 20-feature dataset* as the starting point.
@@ -274,6 +304,9 @@ holdout_data  <- data_clean_reduced[-train_index, ] # For final testing later
 cv_control <- trainControl(
   method = "cv",
   number = 10,
+  timingSamps = 50,
+  summaryFunction = modelSummary,
+  classProbs = TRUE,
   savePredictions = "final" # To collect results for t-tests
 )
 
@@ -283,17 +316,20 @@ cat("Starting Experiment 1: 20 Reduced Features\n")
 
 model_glm_reduced <- train(
   diagnosis ~ ., data = training_data, method = "glm",
-  trControl = cv_control, preProcess = c("center", "scale")
+  trControl = cv_control, preProcess = c("center", "scale"),
+  metric = "ROC"
 )
 
 model_gnb_reduced <- train(
   diagnosis ~ ., data = training_data, method = "nb", # 'nb' is Naive Bayes
-  trControl = cv_control, preProcess = c("center", "scale")
+  trControl = cv_control, preProcess = c("center", "scale"),
+  metric = "ROC"
 )
 
 model_svm_reduced <- train(
   diagnosis ~ ., data = training_data, method = "svmLinear",
-  trControl = cv_control, preProcess = c("center", "scale")
+  trControl = cv_control, preProcess = c("center", "scale"),
+  metric = "ROC"
 )
 
 # --- 7.2. EXPERIMENT 2: Models on PCA Components ---
@@ -302,17 +338,20 @@ cat("Starting Experiment 2: PCA Components\n")
 
 model_glm_pca <- train(
   diagnosis ~ ., data = training_data, method = "glm",
-  trControl = cv_control, preProcess = c("center", "scale", "pca")
+  trControl = cv_control, preProcess = c("center", "scale", "pca"),
+  metric = "ROC"
 )
 
 model_gnb_pca <- train(
   diagnosis ~ ., data = training_data, method = "nb",
-  trControl = cv_control, preProcess = c("center", "scale", "pca")
+  trControl = cv_control, preProcess = c("center", "scale", "pca"),
+  metric = "ROC"
 )
 
 model_svm_pca <- train(
   diagnosis ~ ., data = training_data, method = "svmLinear",
-  trControl = cv_control, preProcess = c("center", "scale", "pca")
+  trControl = cv_control, preProcess = c("center", "scale", "pca"),
+  metric = "ROC"
 )
 
 # --- 7.3. EXPERIMENT 3: Models on LDA Component ---
@@ -347,22 +386,29 @@ holdout_data_lda_comp <- data.frame(
 # --- Step 3: Train GLM, GNB, and SVM on the new 'LD1' feature ---
 # We must use a *new* cv_control because the data is different
 # (e.g., we don't need to center/scale a single feature).
-cv_control_lda <- trainControl(method = "cv", number = 10, savePredictions = "final")
+cv_control_lda <- trainControl(method = "cv", 
+                               number = 10, 
+                               timingSamps = 50,
+                               summaryFunction = modelSummary,
+                               classProbs = TRUE,
+                               savePredictions = "final")
 
 cat("Training GLM on LDA component...\n")
 model_glm_lda <- train(
   diagnosis ~ .,
   data = train_data_lda_comp,
   method = "glm",
-  trControl = cv_control_lda
+  trControl = cv_control_lda,
+  metric = "ROC"
 )
 
 cat("Training GNB on LDA component...\n")
 model_gnb_lda <- train(
   diagnosis ~ .,
   data = train_data_lda_comp,
-  method = "nb",
-  trControl = cv_control_lda
+  method = "naive_bayes",
+  trControl = cv_control_lda,
+  metric = "ROC"
 )
 
 cat("Training SVM on LDA component...\n")
@@ -370,7 +416,8 @@ model_svm_lda <- train(
   diagnosis ~ .,
   data = train_data_lda_comp,
   method = "svmLinear",
-  trControl = cv_control_lda
+  trControl = cv_control_lda,
+  metric = "ROC"
 )
 
 cat("All LDA-component models trained.\n")
@@ -467,7 +514,6 @@ all_model_results <- resamples(list(
   GLM_Reduced = model_glm_reduced,
   GNB_Reduced = model_gnb_reduced,
   SVM_Reduced = model_svm_reduced,
-  LDA_Reduced = model_lda_reduced,
   
   # Experiment 2 (PCA Components)
   GLM_PCA     = model_glm_pca,
@@ -480,12 +526,16 @@ all_model_results <- resamples(list(
   SVM_LDA_Comp = model_svm_lda
 ))
 
+
 # 1. Show the summary table
 cat("Final CV Performance Summary:\n")
 summary(all_model_results)
 
 # 2. Plot the results
-dotplot(all_model_results, metric = "Accuracy")
+dotplot(
+  all_model_results, 
+  metric = "ROC.ROC"
+)
 
 # 3. Statistical Comparison (as requested by teacher)
 cat("\nFinal Statistical Comparison (Paired t-test):\n")
@@ -500,7 +550,7 @@ all_model_results$timings
 ## Accuracy vs. Training Time Trade-off
 
 ```{r}
-# --- 9. Accuracy vs. Training Time Trade-off (FIXED) ---
+# --- 9. ROC vs. Training Time Trade-off ---
 
 # We need 'tibble' to use rownames_to_column
 library(tibble) 
@@ -514,9 +564,9 @@ accuracy_stats <- all_model_results$values %>%
     values_to = "Value"
   ) %>%
   tidyr::separate(ModelMetric, into = c("Model", "Metric"), sep = "~") %>%
-  filter(Metric == "Accuracy") %>%
+  filter(Metric == "ROC.ROC") %>%
   group_by(Model) %>%
-  summarize(Mean_Accuracy = mean(Value, na.rm = TRUE))
+  summarize(Mean_ROC = mean(Value, na.rm = TRUE))
 
 
 # --- Process Timings Data (This is the FIX) ---
@@ -539,11 +589,14 @@ performance_summary <- inner_join(accuracy_stats, time_stats, by = "Model")
 # 4. Print the final summary table
 cat("--- Final Performance vs. Cost Summary ---\n")
 performance_summary <- performance_summary %>%
-  arrange(desc(Mean_Accuracy))
+  arrange(desc(Mean_ROC))
 print(performance_summary)
+```
 
+
+```{r}
 # 5. Plot the Trade-off
-ggplot(performance_summary, aes(x = Mean_Accuracy, y = Mean_Time_sec, color = Model)) +
+ggplot(performance_summary, aes(x = Mean_ROC, y = Mean_Time_sec, color = Model)) +
   geom_point(size = 4, alpha = 0.8) +
   geom_text(aes(label = Model), vjust = -1.2, size = 3.5) + 
   labs(
@@ -556,57 +609,83 @@ ggplot(performance_summary, aes(x = Mean_Accuracy, y = Mean_Time_sec, color = Mo
   theme(legend.position = "none")
 ```
 
+
+
 ```{r}
-# --- 10. Analysis of Prediction Time per Fold ---
-#
-# While 'resamples()' only gives us *total* training time,
-# the individual 'train' objects store the *prediction time* for each fold.
-# This is a key measure of a model's efficiency.
+library(tibble)
+library(knitr)
+library(kableExtra)
+library(dplyr)
+library(tidyr)
 
-# 1. Create a new dataframe from the per-fold prediction timings
-#    (We'll use our stable 7-model set)
-pred_times_df <- data.frame(
-  Fold = 1:10, # Assuming 10 folds
-  
-  # Experiment 1
-  GLM_Reduced = model_glm_reduced$times$prediction,
-  GNB_Reduced = model_gnb_reduced$times$prediction,
-  SVM_Reduced = model_svm_reduced$times$prediction,
-  LDA_Reduced = model_lda_reduced$times$prediction,
-  
-  # Experiment 2
-  GLM_PCA     = model_glm_pca$times$prediction,
-  GNB_PCA     = model_gnb_pca$times$prediction,
-  SVM_PCA     = model_svm_pca,
-  
-  # Experiment 3
-  GLM_LDA_Comp = model_glm_lda$times$prediction
-)
-
-# 2. Pivot this new dataframe into a long format for plotting
-pred_times_long <- pred_times_df %>%
+# --- 1. Get Mean and SD for all metrics ---
+metric_stats <- all_model_results$values %>%
   pivot_longer(
-    cols = -Fold,
-    names_to = "Model",
-    values_to = "PredictionTime_sec"
+    cols = -Resample,
+    names_to = "ModelMetric",
+    values_to = "Value"
+  ) %>%
+  tidyr::separate(ModelMetric, into = c("Model", "Metric"), sep = "~") %>%
+  mutate(Metric = str_replace(Metric, "\\.ROC$", "")) %>%
+  mutate(Metric = str_replace(Metric, "\\.Accuracy$", "")) %>%
+  # Filter for only the metrics we want in the table
+  filter(Metric %in% c("Accuracy", "F1", "ROC")) %>% 
+  
+  # Calculate Mean and SD for each
+  group_by(Model, Metric) %>%
+  summarize(
+    Mean = mean(Value, na.rm = TRUE),
+    SD = sd(Value, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  
+  # Pivot wider so each metric has a Mean and SD column
+  # e.g., Mean_Accuracy, SD_Accuracy, Mean_F1, SD_F1
+  pivot_wider(
+    names_from = Metric,
+    values_from = c(Mean, SD)
   )
 
-# 3. Create a boxplot to compare the distribution of prediction times
-ggplot(pred_times_long, aes(x = Model, y = PredictionTime_sec, fill = Model)) +
-  geom_boxplot() +
-  labs(
-    title = "Model Prediction Time per Fold (10-fold CV)",
-    subtitle = "A measure of model efficiency at prediction time. Lower is better.",
-    x = "Model",
-    y = "Prediction Time (seconds)"
-  ) +
-  scale_y_log10() + # Use a log scale, as SVM might be much slower
-  theme_minimal() +
-  theme(
-    axis.text.x = element_text(angle = 45, hjust = 1),
-    legend.position = "none"
+# --- 2. Get Training Time ---
+time_stats <- all_model_results$timings %>%
+  rownames_to_column(var = "Model") %>%
+  select(Model, Mean_Time_sec = Everything)
+
+# --- 3. Join, Format, and Bold ---
+final_table_data <- inner_join(metric_stats, time_stats, by = "Model") %>%
+  
+  # Create the "Mean ± SD" strings, rounding to 2 decimal places
+  mutate(
+    `Method` = Model, # Rename for the table
+    `Accuracy` = paste0(format(round(Mean_Accuracy, 2), nsmall = 2), " ± ", format(round(SD_Accuracy, 2), nsmall = 2)),
+    `F1-score` = paste0(format(round(Mean_F1, 2), nsmall = 2), " ± ", format(round(SD_F1, 2), nsmall = 2)),
+    `AUC` = paste0(format(round(Mean_ROC, 2), nsmall = 2), " ± ", format(round(SD_ROC, 2), nsmall = 2)),
+    `Training time (s)` = round(Mean_Time_sec, 3)
+  ) %>%
+  
+  # --- THIS IS THE LINE THAT IS REMOVED ---
+  # select(Method, Accuracy, `F1-score`, AUC, `Training time (s)`) %>%
+
+  # --- 4. Add Bolding for Best Performance ---
+  # This mutate call now works because Mean_Accuracy, Mean_F1, etc. still exist
+  mutate(
+    Accuracy = ifelse(Mean_Accuracy == max(Mean_Accuracy, na.rm = TRUE), cell_spec(Accuracy, bold = T), Accuracy),
+    `F1-score` = ifelse(Mean_F1 == max(Mean_F1, na.rm = TRUE), cell_spec(`F1-score`, bold = T), `F1-score`),
+    AUC = ifelse(Mean_ROC == max(Mean_ROC, na.rm = TRUE), cell_spec(AUC, bold = T), AUC)
   )
+
+# --- 5. Print the kable table ---
+# `escape = F` is required to render the bold HTML tags
+# THIS select() call is the correct one, as it's at the end.
+final_table_data %>%
+  select(Method, Accuracy, `F1-score`, AUC, `Training time (s)`) %>%
+  kable(format = "html", escape = F, align = "c") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F) %>%
+  add_header_above(c(" " = 1, "Performance Metrics" = 3, "Cost" = 1))
 ```
+
+
+
 
 # Conclusions
 
