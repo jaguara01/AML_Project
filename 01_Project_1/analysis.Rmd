@@ -23,6 +23,9 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r libraries, echo=FALSE, message=FALSE, warning=FALSE}
 # Libraries
 library(tidyverse)
+library(dplyr)
+library(MLmetrics)
+library(kableExtra)
 library(caret)
 library(ggcorrplot)
 ```
@@ -115,21 +118,88 @@ data_clean <- data_raw %>%
   select(-id) %>%
   mutate(diagnosis = as.factor(diagnosis))
 ```
-[Do something about variables]
 
-## Preprocessing steps
 
-### Missing values
+### Univarate 
 
-```{r pressure, echo=FALSE}
-# --- Check for Total Missing Values ---
-missing_vals_total <- sum(is.na(data_clean))
-cat("Total missing values in the entire dataset:", missing_vals_total)
-```
-
-### Outliers, features distributions - scales
+We first observe that there are no na values in our variables
 
 ```{r}
+# number of nas per variable
+kable(t(data_clean %>% summarise_all(~ sum(is.na(.))))) %>%
+  kable_styling(full_width = FALSE, position = "left")
+```
+```{r}
+# density plots for all numeric variables
+
+explainatory_features <- data_clean %>% select(-diagnosis)
+data_long <- explainatory_features %>%
+  pivot_longer(
+    cols = everything(),
+    names_to = "feature",
+    values_to = "value"
+  )
+
+ggplot(data_long, aes(x = value)) +
+  geom_density(fill = "steelblue", alpha = 0.7) +
+  facet_wrap(~feature, scales = "free", ncol = 5) +
+  labs(
+    title = "Density Plots of Numeric Features",
+    x = "Value",
+    y = "Density"
+  ) +
+  theme_minimal()
+```
+
+We observe that most variables in our dataset have similar distributions. We observe that they don't follow a normal distribution and have a right skewed distribution. Moost of them have a large accumulation of low values with fewer observations in their right tail
+
+
+We can visualy observe the distribution of the target variable. Even if we have more benign cases than malignant ones, the dataset is not highly imbalanced. And we can avoid using preprocessing thechniques such as oversampling or undersampling.
+
+```{r}
+# barplot of diagnosis with % scale
+
+ggplot(data_clean, aes(x = diagnosis, fill = diagnosis)) +
+  geom_bar(aes(y = (..count..) / sum(..count..))) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  labs(
+    title = "Distribution of Diagnosis",
+    x = "Diagnosis",
+    y = "Percentage"
+  ) +
+  theme_minimal()
+```
+
+
+
+### Bivariate analysis 
+
+Since the dataset consists of features obtained by the analysis of related characteristics of an individual it's expected that some of them have high correlation. We can visualize the correlation matrix using the following heatmap.
+
+
+```{r}
+numeric_features <- data_clean %>%
+  select_if(is.numeric)
+
+cor_matrix <- cor(numeric_features)
+
+# Plot the correlation heatmap
+ggcorrplot(cor_matrix,
+  type = "lower",
+  lab = FALSE,
+  colors = c("#2166AC", "white", "#B2182B"),
+  title = "Correlation Heatmap of 30 Numeric Features"
+)
+```
+
+The most correlated variables are ....
+
+Extend - which variables are related
+
+### Explainatory vs response variables
+
+
+```{r,figure.width=10, figure.height=8}}
 # To plot all 30 features at once, we first "pivot" the data
 # into a "long" format. This is the standard tidyverse way.
 data_long <- data_clean %>%
@@ -152,63 +222,60 @@ ggplot(data_long, aes(x = diagnosis, y = value, fill = diagnosis)) +
   theme(
     axis.text.x = element_blank(),  # Hide x-axis labels for a cleaner look
     axis.ticks.x = element_blank(),
-    strip.text = element_text(size = 7) # Smaller facet labels
+    strip.text = element_text(size = 10) # Smaller facet labels
   )
 ```
+Write up a bit
+
+## Preprocessing steps
+
+### Missing values
+
+We observed in the EDA that there are no missing values in our dataset. Therefore, we did not need to apply any imputation techniques.
+
+### Outliers, features distributions - scales
+
 
 -   **Outliers (Anomalous Value):** We immediately observed the presence of numerous outliers, represented by individual observations outside the IQR range. These are particularly present in features like `area_mean`, `area_worst`, and `concavity_worst`. However, because those trust the original source, we know that these are not data entry errors but likely represent true, extreme biological values. Therefore, we made the decision not to remove these outliers, as they are part of the real-world problem. We will proceed with the full dataset, relying on our models to be robust enough to handle this variance.
 
-### Normalization
+Look if the values make sense in the context of the problem.
 
-Our plot also highlights the vast difference in scales across features. Gradient-based models like the Perceptron and Logistic Regression (GLM) are sensitive to feature scales. Without normalization, features with larger magnitudes would dominate the learning process. This plot provides a clear justification for standardizing the features before modeling.
+### Scaling
+
+Our plot also highlights the vast difference in scales across features. Gradient-based models like the Perceptron, Logistic Regression (GLM) and SVM are sensitive to feature scales and perform better with the scaled variables. Without scaling, features with larger magnitudes would dominate the learning process. In the first exploratory analysis we observed that the variabkes were not measured in the same scale, so we scale them to 
+
+```{r}
+data_clean = data_clean %>% mutate_if(is.numeric, scale)
+data_clean
+```
+
 
 ### Elimination of irrelevant variables
 
-For nearly every feature, the boxplot for the Malignant (M) class is visually distinct from the boxplot for the Benign (B) class. The medians, quartiles, and overall ranges show clear separation. This is an excellent sign, as it indicates that our features contain strong predictive information, and we can expect our models to perform well.
+For nearly every feature, the boxplot for the Malignant (M) class is visually distinct from the boxplot for the Benign (B) class. The medians, quartiles, and overall ranges show clear separation. This is an excellent sign, as it indicates that our features contain strong predictive information, as they have different distributions conditioned by the value of target variable.
 
 ```{r}
-# With AI
-nzv_check <- nearZeroVar(data_clean, saveMetrics = TRUE)
-
-# Filter to see only the features that *might* be a problem
-# A "TRUE" in the 'nzv' column means it's a candidate for removal.
-problematic_features <- nzv_check[nzv_check$nzv == TRUE, ]
-
-# Print the results
-if (nrow(problematic_features) > 0) {
-  cat("Found", nrow(problematic_features), "near-zero variance features:\n")
-  print(problematic_features)
-} else {
-  cat("No near-zero variance features found. All features have sufficient variance.\n")
-}
+# # With AI
+# nzv_check <- nearZeroVar(data_clean, saveMetrics = TRUE)
+# 
+# # Filter to see only the features that *might* be a problem
+# # A "TRUE" in the 'nzv' column means it's a candidate for removal.
+# problematic_features <- nzv_check[nzv_check$nzv == TRUE, ]
+# 
+# # Print the results
+# if (nrow(problematic_features) > 0) {
+#   cat("Found", nrow(problematic_features), "near-zero variance features:\n")
+#   print(problematic_features)
+# } else {
+#   cat("No near-zero variance features found. All features have sufficient variance.\n")
+# }
 ```
 
-First, we checked for "irrelevant" features by running a "Near-Zero Variance" (NZV) test. This test finds any feature that is constant or nearly constant, as a feature that doesn't change cannot be a predictor. We used the `caret::nearZeroVar()` function to check all 30 features.
-
-we note that we used AI to help confirm this was the correct tool for this task.
-
-The NZV test showed that all 30 features have enough variance, so we did not eliminate any features at this step.
 
 ### Elimination of redundant variables
 
-Our primary tool for this step was correlation analysis. We first calculated the correlation matrix for all numeric features and visualized it using a heatmap.
+In the EDA we first calculated the correlation matrix for all numeric features and visualized it using a heatmap.
 
-```{r}
-# Correlation matrix.
-# numeric features selections
-numeric_features <- data_clean %>%
-  select_if(is.numeric)
-
-cor_matrix <- cor(numeric_features)
-
-# Plot the correlation heatmap
-ggcorrplot(cor_matrix,
-  type = "lower",
-  lab = FALSE,
-  colors = c("#2166AC", "white", "#B2182B"),
-  title = "Correlation Heatmap of 30 Numeric Features"
-)
-```
 
 The heatmap immediately revealed large blocks of high correlation (dark red), confirming that our dataset contains significant multicollinearity. For example, features related to tumor size, like radius_mean, perimeter_mean, and area_mean, are all nearly perfectly correlated.
 
@@ -233,7 +300,8 @@ cat("Reduced data has", ncol(data_clean_reduced), "columns.\n")
 
 While the heatmap is excellent for visualization, we use a correlation matrix and a cutoff of 0.90 (standard threshold) for reducing feature redundancy. This function automatically identifies the minimum number of features to remove to ensure that no two features in the remaining dataset have a correlation greater than 0.90.
 
-This analysis identified 10 features as redundant.
+This analysis identified 10 features as redundant and therefore we removed them from the dataset.
+
 
 ### Normalization of the variables
 
@@ -258,16 +326,132 @@ Three groups of experiments are conducted to assess the impact of different feat
 The results from all three setups will later be compared—both across models (GLM vs. NB vs. SVM) and across representations (raw features vs. PCA vs. LDA)—to determine which combination achieves the best generalization performance on unseen data.
 
 
-```{r custom_summary_function, echo=FALSE}
-# Load this library in your main 'libraries' chunk
-library(MLmetrics) 
+## Method 1: Generalized Linear Model (GLM)
 
+### Model formulation
+A **Generalized Linear Model (GLM)** assumes that the response variable \(Y\) follows a distribution from the exponential family and that its mean \(\mu = \mathbb{E}[Y|X]\) is related to a linear predictor through a *link function* \(g(\cdot)\):
+\[
+g(\mu) = \beta_0 + \beta_1 x_1 + \cdots + \beta_d x_d.
+\]
+For binary classification, the model used is **logistic regression**, with
+\[
+g(\mu) = \text{logit}(\mu) = \log\left(\frac{\mu}{1 - \mu}\right),
+\]
+which ensures predictions stay between 0 and 1.
+
+### Theoretical properties and justification
+GLMs are statistically grounded, interpretable, and perform well when the relationship between predictors and the log-odds of the outcome is approximately linear. They provide *probabilistic outputs* and naturally model class probabilities. Logistic regression also maximizes the likelihood of observed labels under a Bernoulli distribution, making it robust for well-separated classes.
+
+### Implementation details
+The GLM was implemented using the `train()` function from the **caret** package with `method = "glm"`, applying **centering and scaling** as preprocessing. Model fitting uses **Iteratively Reweighted Least Squares (IRLS)** to find the maximum-likelihood estimates of \(\beta\). Regularization was not applied in this baseline version.
+
+---
+
+## Method 2: Gaussian Naive Bayes (GNB)
+
+### Model formulation
+Gaussian Naive Bayes models the class-conditional distribution of each feature as Gaussian:
+\[
+p(x_j | y = c) = \frac{1}{\sqrt{2\pi\sigma_{jc}^2}} \exp\!\left(-\frac{(x_j - \mu_{jc})^2}{2\sigma_{jc}^2}\right),
+\]
+and applies Bayes’ rule assuming **conditional independence** between features:
+\[
+p(y|x) \propto p(y)\prod_{j=1}^d p(x_j|y).
+\]
+The predicted class is the one with the highest posterior probability.
+
+### Theoretical properties and justification
+Despite the strong independence assumption, Naive Bayes often performs surprisingly well in practice, especially when features are only weakly correlated. It is simple, fast, and provides a strong probabilistic baseline. GNB is particularly effective when the class distributions are approximately normal and separable in feature space.
+
+### Implementation details
+Implemented via `method = "nb"` in **caret**, with preprocessing including **centering and scaling**. The algorithm estimates each feature’s mean and variance per class, then computes log-posterior probabilities for classification. No parameter tuning is typically needed, making it computationally efficient.
+
+---
+
+## Method 3: Support Vector Machine (SVM)
+
+### Model formulation
+A linear Support Vector Machine seeks the hyperplane \(w^\top x + b = 0\) that maximizes the margin between two classes:
+\[
+\min_{w,b} \frac{1}{2}\|w\|^2 + C \sum_{i=1}^n \max(0, 1 - y_i(w^\top x_i + b)),
+\]
+where \(C > 0\) balances margin width and classification error (hinge loss). The prediction function is
+\[
+f(x) = \text{sign}(w^\top x + b).
+\]
+
+### Theoretical properties and justification
+SVMs are **margin-based classifiers** that provide good generalization, especially in high-dimensional spaces. The hinge loss focuses on difficult cases (support vectors), making the classifier robust to noise and overfitting. A linear kernel is used here since the dataset is well-behaved and moderately dimensional.
+
+### Implementation details
+Implemented using `method = "svmLinear"` in **caret**, with **10-fold cross-validation**. Features were **centered and scaled** before training. The regularization parameter \(C\) was tuned automatically using internal resampling to optimize performance.
+
+
+## Comparison framework
+
+To ensure a fair comparison, all models were trained using:
+- The **same 10-fold cross-validation** (`trainControl(method="cv", number=10)`),
+- The **same training/holdout splits**, and
+- The **same preprocessing pipeline** (centering and scaling).
+
+Performance metrics such as **Accuracy**, **AUC**, and **F1-score** will be compared across models and experimental setups (baseline, PCA, LDA). Statistical significance tests (e.g., paired *t*-tests on cross-validation results) may be applied to confirm whether performance differences are meaningful.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r custom_summary_function, echo=FALSE}
 # This function calculates all the metrics we need
 modelSummary <- function(data, lev, model) {
   
   # 1. Get Accuracy (from defaultSummary)
   #    Requires data$pred and data$obs
   acc_val <- defaultSummary(data, lev, model)["Accuracy"]
+  
+  # Recall - Best metric for medical case studies
+  recal_val <- defaultSummary(data, lev, model)["Sensitivity"]
+
   
   # 2. Get AUC (ROC) (from twoClassSummary)
   #    Requires class probabilities (e.g., data$M and data$B)
@@ -286,6 +470,39 @@ modelSummary <- function(data, lev, model) {
     F1 = f1_val)
 }
 ```
+## Train test split 
+
+
+## Baselines
+
+### GLM
+
+### NB
+
+### SVM
+
+## Build PCA
+
+### LDA/QDA depending on plot - sobre PCA data - si va molt malametn sobre tot
+
+check plot
+
+### GLM on PCA
+
+### NB on PCA
+
+### SVM PCA 
+
+### Hyperparamter tunning
+
+### GLM TH
+
+### NB TH
+
+### SVM Kernel 
+
+
+
 
 ```{r warning=FALSE, echo=FALSE}
 # --- 6. Final Data Splitting ---
@@ -378,6 +595,8 @@ train_data_lda_comp <- data.frame(
   LD1 = predict(model_lda_reduced, newdata = training_data)
 )
 
+
+
 # We also transform our holdout data for the final test
 holdout_data_lda_comp <- data.frame(
   diagnosis = holdout_data$diagnosis,
@@ -422,75 +641,7 @@ model_svm_lda <- train(
 
 cat("All LDA-component models trained.\n")
 ```
-## Method 1: Generalized Linear Model (GLM)
 
-### Model formulation
-A **Generalized Linear Model (GLM)** assumes that the response variable \(Y\) follows a distribution from the exponential family and that its mean \(\mu = \mathbb{E}[Y|X]\) is related to a linear predictor through a *link function* \(g(\cdot)\):
-\[
-g(\mu) = \beta_0 + \beta_1 x_1 + \cdots + \beta_d x_d.
-\]
-For binary classification, the model used is **logistic regression**, with
-\[
-g(\mu) = \text{logit}(\mu) = \log\left(\frac{\mu}{1 - \mu}\right),
-\]
-which ensures predictions stay between 0 and 1.
-
-### Theoretical properties and justification
-GLMs are statistically grounded, interpretable, and perform well when the relationship between predictors and the log-odds of the outcome is approximately linear. They provide *probabilistic outputs* and naturally model class probabilities. Logistic regression also maximizes the likelihood of observed labels under a Bernoulli distribution, making it robust for well-separated classes.
-
-### Implementation details
-The GLM was implemented using the `train()` function from the **caret** package with `method = "glm"`, applying **centering and scaling** as preprocessing. Model fitting uses **Iteratively Reweighted Least Squares (IRLS)** to find the maximum-likelihood estimates of \(\beta\). Regularization was not applied in this baseline version.
-
----
-
-## Method 2: Gaussian Naive Bayes (GNB)
-
-### Model formulation
-Gaussian Naive Bayes models the class-conditional distribution of each feature as Gaussian:
-\[
-p(x_j | y = c) = \frac{1}{\sqrt{2\pi\sigma_{jc}^2}} \exp\!\left(-\frac{(x_j - \mu_{jc})^2}{2\sigma_{jc}^2}\right),
-\]
-and applies Bayes’ rule assuming **conditional independence** between features:
-\[
-p(y|x) \propto p(y)\prod_{j=1}^d p(x_j|y).
-\]
-The predicted class is the one with the highest posterior probability.
-
-### Theoretical properties and justification
-Despite the strong independence assumption, Naive Bayes often performs surprisingly well in practice, especially when features are only weakly correlated. It is simple, fast, and provides a strong probabilistic baseline. GNB is particularly effective when the class distributions are approximately normal and separable in feature space.
-
-### Implementation details
-Implemented via `method = "nb"` in **caret**, with preprocessing including **centering and scaling**. The algorithm estimates each feature’s mean and variance per class, then computes log-posterior probabilities for classification. No parameter tuning is typically needed, making it computationally efficient.
-
----
-
-## Method 3: Support Vector Machine (SVM)
-
-### Model formulation
-A linear Support Vector Machine seeks the hyperplane \(w^\top x + b = 0\) that maximizes the margin between two classes:
-\[
-\min_{w,b} \frac{1}{2}\|w\|^2 + C \sum_{i=1}^n \max(0, 1 - y_i(w^\top x_i + b)),
-\]
-where \(C > 0\) balances margin width and classification error (hinge loss). The prediction function is
-\[
-f(x) = \text{sign}(w^\top x + b).
-\]
-
-### Theoretical properties and justification
-SVMs are **margin-based classifiers** that provide good generalization, especially in high-dimensional spaces. The hinge loss focuses on difficult cases (support vectors), making the classifier robust to noise and overfitting. A linear kernel is used here since the dataset is well-behaved and moderately dimensional.
-
-### Implementation details
-Implemented using `method = "svmLinear"` in **caret**, with **10-fold cross-validation**. Features were **centered and scaled** before training. The regularization parameter \(C\) was tuned automatically using internal resampling to optimize performance.
-
-
-## Comparison framework
-
-To ensure a fair comparison, all models were trained using:
-- The **same 10-fold cross-validation** (`trainControl(method="cv", number=10)`),
-- The **same training/holdout splits**, and
-- The **same preprocessing pipeline** (centering and scaling).
-
-Performance metrics such as **Accuracy**, **AUC**, and **F1-score** will be compared across models and experimental setups (baseline, PCA, LDA). Statistical significance tests (e.g., paired *t*-tests on cross-validation results) may be applied to confirm whether performance differences are meaningful.
 
 # Discussion of results
 ## Overall performance
@@ -505,6 +656,8 @@ Performance metrics such as **Accuracy**, **AUC**, and **F1-score** will be comp
 
 ## Final results
 #TODO Adapt it to the schema provided by the teacher
+
+
 
 ```{r}
 # --- 8. Final Results Comparison (Corrected) ---
