@@ -24,16 +24,19 @@ knitr::opts_chunk$set(echo = TRUE)
 # Libraries
 library(tidyverse)
 library(dplyr)
+library(corrplot)
 library(MLmetrics)
+library(robustbase)
 library(kableExtra)
 library(caret)
 library(ggcorrplot)
 library(dplyr)
+library(glmnet)      
+library(pROC)        
+library(e1071)       
+library(klaR)        
 ```
 
-Here is a draft of the **Abstract**, **Introduction**, **Problem Statement**, and **Related Work** sections for your project, incorporating a review of prior publications using the Breast Cancer Wisconsin (Diagnostic) Dataset (WDBC) and stating our ambitions. You can tailor the language, tone and details as you see fit.
-
----
 
 ## Abstract
 
@@ -127,28 +130,25 @@ We first observe that there are no na values in our variables
 
 ```{r}
 # number of nas per variable
-kable(t(data_clean %>% summarise_all(~ sum(is.na(.))))) %>%
+data_clean %>%
+  summarise_all(~ sum(is.na(.))) %>%
+  pivot_longer(everything(),names_to = "variable",values_to = "NA count") %>%
+  kable() %>%
   kable_styling(full_width = FALSE, position = "left")
 ```
+
+
 ```{r}
 # density plots for all numeric variables
 
-explainatory_features <- data_clean %>% select(-diagnosis)
-data_long <- explainatory_features %>%
-  pivot_longer(
-    cols = everything(),
-    names_to = "feature",
-    values_to = "value"
-  )
+explainatory_features <- data_clean %>% dplyr::select(-diagnosis)
+data_long <- explainatory_features %>% 
+  pivot_longer(cols = everything(),names_to = "feature",values_to = "value")
 
 ggplot(data_long, aes(x = value)) +
   geom_density(fill = "steelblue", alpha = 0.7) +
   facet_wrap(~feature, scales = "free", ncol = 5) +
-  labs(
-    title = "Density Plots of Numeric Features",
-    x = "Value",
-    y = "Density"
-  ) +
+  labs(title = "Density Plots of Numeric Features",x = "Value",y = "Density") +
   theme_minimal()
 ```
 
@@ -163,11 +163,7 @@ We can visualy observe the distribution of the target variable. Even if we have 
 ggplot(data_clean, aes(x = diagnosis, fill = diagnosis)) +
   geom_bar(aes(y = (..count..) / sum(..count..))) +
   scale_y_continuous(labels = scales::percent_format()) +
-  labs(
-    title = "Distribution of Diagnosis",
-    x = "Diagnosis",
-    y = "Percentage"
-  ) +
+  labs(title = "Distribution of Diagnosis",x = "Diagnosis",y = "Percentage") +
   theme_minimal()
 ```
 
@@ -179,18 +175,14 @@ Since the dataset consists of features obtained by the analysis of related chara
 
 
 ```{r}
-numeric_features <- data_clean %>%
-  select_if(is.numeric)
+numeric_features <- data_clean %>% select_if(is.numeric)
 
 cor_matrix <- cor(numeric_features)
 
-# Plot the correlation heatmap
-ggcorrplot(cor_matrix,
-  type = "lower",
-  lab = FALSE,
-  colors = c("#2166AC", "white", "#B2182B"),
-  title = "Correlation Heatmap of 30 Numeric Features"
-)
+#ggcorrplot(cor_matrix,type = "lower",lab = FALSE,colors = c("#2166AC", "white", "#B2182B"),title = "Correlation Heatmap of 30 Numeric Features")
+
+corrplot(cor_matrix,type = "lower",  tl.col = "black",title = "Pearson Correlation Heatmap of 30 Numeric Features")
+
 ```
 
 The most correlated variables are ....
@@ -204,27 +196,15 @@ Extend - which variables are related
 # To plot all 30 features at once, we first "pivot" the data
 # into a "long" format. This is the standard tidyverse way.
 data_long <- data_clean %>%
-  pivot_longer(
-    cols = -diagnosis,       # Pivot every column *except* 'diagnosis'
-    names_to = "feature",    # New column for the feature name
-    values_to = "value"      # New column for its value
-  )
+  pivot_longer(cols = -diagnosis,names_to = "feature",values_to = "value")
 
 ggplot(data_long, aes(x = diagnosis, y = value, fill = diagnosis)) +
   geom_boxplot() +
   facet_wrap(~feature, scales = "free_y", ncol = 5) +
   scale_fill_brewer(palette = "Paired") +
-  labs(
-    title = "Feature Distributions by Diagnosis (Malignant vs. Benign)",
-    x = "Diagnosis",
-    y = "Feature Value"
-  ) +
+  labs(title = "Feature Distributions by Diagnosis (Malignant vs. Benign)",x = "Diagnosis",y = "Feature Value") +
   theme_minimal() +
-  theme(
-    axis.text.x = element_blank(),  # Hide x-axis labels for a cleaner look
-    axis.ticks.x = element_blank(),
-    strip.text = element_text(size = 10) # Smaller facet labels
-  )
+  theme(axis.text.x = element_blank(),axis.ticks.x = element_blank(),strip.text = element_text(size = 10) )
 ```
 Write up a bit
 
@@ -246,8 +226,7 @@ Look if the values make sense in the context of the problem.
 Our plot also highlights the vast difference in scales across features. Gradient-based models like the Perceptron, Logistic Regression (GLM) and SVM are sensitive to feature scales and perform better with the scaled variables. Without scaling, features with larger magnitudes would dominate the learning process. In the first exploratory analysis we observed that the variabkes were not measured in the same scale, so we scale them to 
 
 ```{r}
-data_clean = data_clean %>% mutate_if(is.numeric, scale)
-data_clean
+data_clean <- data_clean %>% mutate_if(is.numeric, ~ as.numeric(scale(.)))
 ```
 
 
@@ -293,7 +272,7 @@ print(highly_correlated_features)
 # Create the reduced Dataset
 
 data_clean_reduced <- data_clean %>%
-  select(-all_of(highly_correlated_features))
+  dplyr::select(-all_of(highly_correlated_features))
 
 cat("\nOriginal data had", ncol(data_clean), "columns (30 features + 1 target).\n")
 cat("Reduced data has", ncol(data_clean_reduced), "columns.\n")
@@ -492,33 +471,6 @@ Results from the 10-fold cross-validation (used during training) will also be ex
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-```{r setup, include=FALSE}
-# --- 0. Load Required Libraries ---
-# Install these if you don't have them:
-# install.packages(c("caret", "tidyverse", "MLmetrics", "glmnet", "pROC", "e1071", "klaR"))
-
-library(caret)       # For train() and main framework
-library(tidyverse)   # For data manipulation and plotting
-library(MLmetrics)   # For F1_Score
-library(glmnet)      # For regularized GLM (Elastic Net)
-library(pROC)        # For final (AUC)ROC calculation on holdout
-library(e1071)       # Dependency for SVM
-library(klaR)        # Dependency for Naive Bayes
-```
-
 # Discussion of results
 
 ## Detailed analysis
@@ -558,15 +510,7 @@ modelSummary <- function(data, lev, model) {
     F1 = f1_val)
 }
 
-# --- 6. Final Data Splitting ---
-# We assume 'data_clean_reduced' is your pre-processed 20-feature dataset
-# For this code to run, let's create a placeholder
-# ---- REMOVE THIS PLACEHOLDER AND LOAD YOUR REAL DATA ----
-data_clean_reduced <- data.frame(
-  matrix(rnorm(100 * 20), 100, 20),
-  diagnosis = factor(sample(c("M", "B"), 100, replace = TRUE))
-)
-# -----------------------------------------------------------
+
 
 set.seed(123) # for reproducibility
 train_index <- createDataPartition(data_clean_reduced$diagnosis, p = 0.80, list = FALSE)
@@ -591,6 +535,8 @@ cv_control <- trainControl(
 ```
 
 ### Experiment 1: Baseline Models
+
+
 
 ```{r, warning=FALSE}
 # --- Experiment 1: Baseline Models (Reduced Features) ---
@@ -633,8 +579,10 @@ baseline_results <- resamples(models_baseline)
 summary(baseline_results)
 
 # --- Plot Baseline Comparison ---
-dotplot(baseline_results, metric = "ROC")
-dotplot(baseline_results, metric = "Recall")
+dotplot(baseline_results, metric = "ROC.ROC")
+dotplot(baseline_results, metric = "Recall.Sens")
+dotplot(baseline_results, metric = "Accuracy.Accuracy")
+
 
 # --- Execution Times ---
 data.frame(
@@ -642,6 +590,8 @@ data.frame(
   ExecTime_sec = sapply(models_baseline, function(x) x$times$everything["user.self"])
 )
 ```
+
+
 
 ### Experiment 2: PCA
 
@@ -652,54 +602,117 @@ Here we run **Experiment 2: PCA Representation**. We add `preProcess = "pca"` to
   * **PCA (Principal Component Analysis)** is **unsupervised**. It finds components that explain the most *variance* in the features, without looking at the `diagnosis` class.
   * **LDA (Linear Discriminant Analysis)** is **supervised**. It finds components that maximize the *separation* between the classes (`M` vs. `B`).
   * **Decision:** If your goal is just dimensionality reduction, PCA is standard. If your primary goal is class separation (which it is\!), **LDA is often a better choice for classification**. You can test it by replacing `"pca"` with `"lda"` in the `preProcess` argument.
+  
+To have an idea of the shape of our data in lower dimensional space we also plot the first two principal components colored by the target variable. By doing this we can observe which kind of separation exists between the two classes and determine different things. If we oberve linear separability we might conclude that linear models such as LDA migth perform well. If we observe that the classes don't follow a linear pattern we can suspect quadratic separations might work well. It may also be usefull to determine the best kernel function that can be applied to the data in order to train an SVM model.
 
-<!-- end list -->
+
+
+```{r}
+# data is already scaled in the preprocessing, if not we would need to scale ir before training PCA
+pca = prcomp(training_data %>% dplyr::select(-diagnosis))
+pca_data = data.frame(PC1 = pca$x[,1], PC2 = pca$x[,2], diagnosis = training_data$diagnosis)
+ggplot(pca_data, aes(x = PC1, y = PC2, color = diagnosis)) +
+  geom_point(alpha = 0.7, size = 2) +
+  labs(title = "PCA of Training Data: First Two Principal Components",
+       x = "Principal Component 1",
+       y = "Principal Component 2") +
+  theme_minimal() +
+  geom_abline(slope = 0.5, intercept = 0.7, linetype = "dashed", color = "black",lwd = 0.8) +
+  geom_function(fun = function(x) 0.8 + 0.6 * x - 0.1 * x^2,color = "brown",linetype = "dashed",lwd = 0.8) +
+  scale_colour_manual(values = c("M" = "red", "B" = "blue"))
+```
+
+After the visualization, we realize that the data in 2 dimensions is separable for both linear and non linear decision boundaries, exceptiuating some overlapping points. We expect both LDA and QDA to perform well for this classification problem.
+
+We did not observe complex patterns in the first 2 dimensions of our data after PCA transformation. If we were to train an SVM model we probably wouldn't need a kernel that caputurtes non-linear patterns such as RBF or spheric. Selecting a linear or polynomial kernel  with a moderate degree would probably be sufficient to separate the data correctly
+
+Now we want to apply the different algorithms using PCA dimensions as input features. We select the number of dimensions that are able to accumulate 80% of the intertia of the data
+
+```{r}
+summary(pca)
+```
+
+We see that only selecting 5 principal components we are able to retain more than 80% of the variance of the data. Therefore we will select 5 components for our PCA transformation in the following models.
+
+
+
 
 ```{r exp2_pca, warning=FALSE}
 # --- Experiment 2: PCA Representation ---
+training_data_pca <- pca$x[, 1:5] %>% as.data.frame() %>% add_column(diagnosis = training_data$diagnosis)
+
 models_pca <- list()
 
 # 2.1: GLM + PCA
 set.seed(123)
+
 models_pca$glm <- train(
   diagnosis ~ ., 
-  data = training_data,
+  data = training_data_pca,
   method = "glm",
   family = "binomial",
-  preProcess = c("center", "scale", "pca"), # Apply PCA
   trControl = cv_control,
   metric = "ROC"
 )
+
 
 # 2.2: GNB + PCA
 set.seed(123)
 models_pca$gnb <- train(
   diagnosis ~ ., 
-  data = training_data,
+  data = training_data_pca,
   method = "nb",
-  preProcess = c("center", "scale", "pca"),
   trControl = cv_control,
   metric = "ROC"
 )
 
 # 2.3: Linear SVM + PCA
 set.seed(123)
-models_pca$svm <- train(
+models_pca$svm_linear <- train(
   diagnosis ~ ., 
-  data = training_data,
+  data = training_data_pca,
   method = "svmLinear",
-  preProcess = c("center", "scale", "pca"),
   trControl = cv_control,
   metric = "ROC"
 )
+
+svm_grid <- data.frame(degree = 2, scale = 1, C = 1)
+models_pca$svm_poly2 <- train(
+  diagnosis ~ ., 
+  data = training_data_pca,
+  method = "svmPoly",
+  trControl = cv_control,
+  metric = "ROC",
+  tuneGrid = svm_grid,
+)
+
+
+models_pca$lda <- train(
+  diagnosis ~ ., 
+  data = training_data_pca,
+  method = "lda",
+  trControl = cv_control,
+  metric = "ROC",
+)
+
+models_pca$qda <- train(
+  diagnosis ~ ., 
+  data = training_data_pca,
+  method = "qda",
+  trControl = cv_control,
+  metric = "ROC",
+)
+
 
 # --- Collect and display PCA CV results ---
 pca_results <- resamples(models_pca)
 summary(pca_results)
 
 # --- Plot PCA Comparison ---
-dotplot(pca_results, metric = "ROC")
-dotplot(pca_results, metric = "Recall")
+dotplot(pca_results, metric = "ROC.ROC")
+dotplot(pca_results, metric = "Recall.Sens")
+dotplot(pca_results, metric = "Accuracy.Accuracy")
+
 
 # --- Execution Times ---
 data.frame(
@@ -707,6 +720,26 @@ data.frame(
   ExecTime_sec = sapply(models_pca, function(x) x$times$everything["user.self"])
 )
 ```
+### Comparing Baseline vs PCA
+
+```{r}
+baseline_results_stat = (baseline_results[["values"]]) %>% dplyr::select(-Resample)
+baseline_results_stat = as.data.frame(colMedians(as.matrix(baseline_results_stat))) %>% rename('Baseline' = 'colMedians(as.matrix(baseline_results_stat))')
+
+pca_results_stat = (pca_results[["values"]]) %>% dplyr::select(-Resample)
+pca_results_stat = as.data.frame(colMedians(as.matrix(pca_results_stat))) %>% rename('PCA' = 'colMedians(as.matrix(pca_results_stat))')
+
+comparison = left_join(
+  baseline_results_stat %>% rownames_to_column("Metric-Model"),
+  pca_results_stat %>% rownames_to_column("Metric-Model"),
+  by = "Metric-Model"
+) %>%
+  mutate(Difference = PCA - Baseline)
+comparison
+```
+
+Similar performcance for both methods. PCA has slightly better median results than the baseline. Considering that we are reducing dimensionality and therefore complexity of the models we will conider training the models with PCA transformation in the next steps.
+
 
 ### Hyperparametrization
 
@@ -728,7 +761,7 @@ glm_grid <- expand.grid(
 set.seed(123)
 model_tuned_glm <- train(
   diagnosis ~ ., 
-  data = training_data,
+  data = training_data_pca,
   method = "glmnet",
   trControl = cv_control,
   tuneGrid = glm_grid,
@@ -739,37 +772,164 @@ plot(model_tuned_glm)
 print(model_tuned_glm$bestTune)
 print(paste("GLM Tune Time (sec):", model_tuned_glm$times$everything["user.self"]))
 ```
+Additionaly to the regulkarization hyperparameters we tried to see the impact of the cutoff threshold on the recall and error rate (1-accuracy) of the model.
+
+
+
+
+
+```{r}
+holdout_data_pca <- predict(pca, newdata = holdout_data %>% dplyr::select(-diagnosis))[, 1:5] %>% as.data.frame() %>% add_column(diagnosis = holdout_data$diagnosis)
+
+
+cutoffs = seq(0.2, 0.8, by = 0.05)
+glm_probs <- predict(model_tuned_glm, newdata = holdout_data_pca, type = "prob")$M
+
+glm_metrics <- data.frame(
+  Cutoff = cutoffs,
+  Recall = sapply(cutoffs, function(cut) {
+    preds <- ifelse(glm_probs >= cut, "M", "B")
+    cm <- confusionMatrix(factor(preds, levels = c("M", "B")), holdout_data$diagnosis, positive = "M")
+    cm$byClass["Sensitivity"]
+  }),
+
+  Accuracy = sapply(cutoffs, function(cut) {
+    preds <- ifelse(glm_probs >= cut, "M", "B")
+    cm <- confusionMatrix(factor(preds, levels = c("M", "B")), holdout_data$diagnosis, positive = "M")
+    cm$overall["Accuracy"]
+  }
+)
+)
+
+
+ggplot(glm_metrics, aes(x = Cutoff)) +
+  geom_line(aes(y = Recall, color = "Recall"), size = 1) +
+  geom_line(aes(y = 1 - Accuracy, color = "Error Rate"), size = 1) +
+  labs(title = "GLM: Recall, F1-Score, and Accuracy vs. Decision Cutoff",
+       x = "Decision Cutoff",
+       y = "Metric Value") +
+  theme_minimal() +
+  ylim(0, 1)
+```
+
+Seeing that both metrics remain almos constant across different cutoff values indicates that the glm is gives very high predicted probabilities. This indicates taht the models works correctly and is very confident about its predictions.
+
+We also tried to plot the ROC curve and analyze which of the threshold had a point (Recall, FPR) closest to (1,0) point, which would indicate the best trade-off between recall and false positive rate and therefore a great candidate for the cutoff threshold. Points around 0.5 scored with the exacct same distance from (1,0) point so we can select any of them without much difference in performance. We excluded this form the report since it did not lead to any relevant conclusion/imporvement.
+
+
 
 #### GNB
 
-We tune the **Gaussian Naive Bayes** model, testing `laplace` smoothing, `usekernel` for non-parametric density, and `adjust` for kernel bandwidth.
+Since we have numericall predicitve variables it does not make sense to tune the laplace hyperparameter which is used to avoid zero probabilities in categorical features. Just like in the previous section we will tune the threshold of the model to see its impact on recall and accuracy.
+
 
 ```{r exp3_gnb_tune, warning=FALSE}
 # --- 3.2: GNB Tuning ---
 
 # Create a grid based on your methodology
-gnb_grid <- expand.grid(
-  laplace = c(0, 0.5, 1),
-  usekernel = c(TRUE, FALSE),
-  adjust = c(0.5, 1, 2)
-)
+
 
 set.seed(123)
 model_tuned_gnb <- train(
   diagnosis ~ ., 
-  data = training_data,
+  data = training_data_pca,
   method = "nb",
+  kernel = FALSE,
   trControl = cv_control,
-  tuneGrid = gnb_grid,
   metric = "ROC"
 )
 
-plot(model_tuned_gnb)
-print(model_tuned_gnb$bestTune)
+model_tuned_gnb[["results"]][1,4:7]
 print(paste("GNB Tune Time (sec):", model_tuned_gnb$times$everything["user.self"]))
 ```
 
+
+We now tune the threshold for the GNB model to see its impact on recall and accuracy.
+
+
+```{r}
+cutoffs = seq(0, 1, by = 0.05)
+nb_probs <- predict(model_tuned_gnb, newdata = holdout_data_pca, type = "prob")$M
+
+nb_metrics <- data.frame(
+  Cutoff = cutoffs,
+  Recall = sapply(cutoffs, function(cut) {
+    preds <- ifelse(nb_probs >= cut, "M", "B")
+    cm <- confusionMatrix(factor(preds, levels = c("M", "B")), holdout_data$diagnosis, positive = "B")
+    cm$byClass["Sensitivity"]
+  }),
+
+  Accuracy = sapply(cutoffs, function(cut) {
+    preds <- ifelse(nb_probs >= cut, "M", "B")
+    cm <- confusionMatrix(factor(preds, levels = c("M", "B")), holdout_data$diagnosis, positive = "B")
+    cm$overall["Accuracy"]
+  }),
+
+  Specificity = sapply(cutoffs, function(cut) {
+    preds <- ifelse(nb_probs >= cut, "M", "B")
+    cm <- confusionMatrix(factor(preds, levels = c("M", "B")), holdout_data$diagnosis, positive = "B")
+    cm$byClass["Specificity"]
+  }
+),
+  F1 = sapply(cutoffs, function(cut) {
+    preds <- ifelse(nb_probs >= cut, "M", "B")
+    cm <- confusionMatrix(factor(preds, levels = c("M", "B")), holdout_data$diagnosis, positive = "B")
+    precision <- cm$byClass["Pos Pred Value"]
+    recall <- cm$byClass["Sensitivity"]
+    return(2 * (precision * recall) / (precision + recall))
+    }
+))
+
+ggplot(nb_metrics, aes(x = Cutoff)) +
+  geom_line(aes(y = Recall, color = "Recall"), size = 1) +
+  geom_line(aes(y = 1 - Accuracy, color = "Error Rate"), size = 1) +
+  labs(title = "NB: Recall, and Accuracy vs. Decision Cutoff",
+       x = "Decision Cutoff",
+       y = "Metric Value") +
+  theme_minimal() +
+  ylim(0, 1)
+```
+
+As we can see in the plot there exists an impact of the cutoff threshold on both recall and accuracy. Higher cutoffs lead to a decrease in performance.
+To decide what the best cutoff is we can plot the ROC curve and determine which point is closest to (1,0) point. This point represents the best trade-off between recall and false positive rate.
+
+
+```{r}
+nb_metrics['distance'] = sqrt((1 - nb_metrics$Recall)^2 + (0 - (1 - nb_metrics$Specificity))^2)
+optimal_cutoff_nb = nb_metrics %>% filter(distance == min(distance)) %>% dplyr::select(Cutoff, Recall, Specificity)
+print(optimal_cutoff_nb)
+
+# plot roc curve
+ggplot(nb_metrics, aes(x = 1 - Specificity, y = Recall)) +
+  geom_line(color = "blue", size = 1) +
+  geom_point(aes(color = distance), size = 3) +
+  labs(title = "GNB: ROC Curve with Distance to (1,0)",
+       x = "False Positive Rate (1 - Specificity)",
+       y = "True Positive Rate (Recall)") +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "black") +
+  geom_point(data = optimal_cutoff_nb, aes(x = 1 - Specificity, y = Recall), color = "red", size = 6) +
+  ylim(0,1) + 
+  xlim(0,1) + 
+  geom_text(aes(label = Cutoff, vjust = -1),check_overlap = T) +
+  theme_minimal()
+```
+
+overwrite the default metrics by the ones obtained by tunning the threshold
+
+```{r}
+model_tuned_gnb[["results"]][["Accuracy.Accuracy"]] = nb_metrics[which(nb_metrics$Cutoff == optimal_cutoff_nb$Cutoff), "Accuracy"]
+model_tuned_gnb[["results"]][["Recall.Sens"]] = nb_metrics[which(nb_metrics$Cutoff == optimal_cutoff_nb$Cutoff), "Recall"]
+model_tuned_gnb[["results"]][["F1"]] = nb_metrics[which(nb_metrics$Cutoff == optimal_cutoff_nb$Cutoff), "F1"]
+```
+
+
+We find that the optimal threshold is 0.3 giving the best tade-off between recall and specificity. This value also gives the best accuracy.
+The recall for this cutoff is `r round(optimal_cutoff_nb$Recall,3)`, the specificity is `r round(optimal_cutoff_nb$Specificity,3)` and the accuracy is `r round(optimal_cutoff_nb$Accuracy,3)`.
+
+
 #### SVM
+
+##### Linear 
 
 We tune the **Linear SVM**, focusing on the cost parameter `C`, which controls the trade-off between margin width and misclassification.
 
@@ -778,24 +938,45 @@ We tune the **Linear SVM**, focusing on the cost parameter `C`, which controls t
 
 # Create a grid for the Cost (C) parameter
 svm_grid <- expand.grid(
-  C = c(0.01, 0.1, 1, 10, 100)
+  C = c(0.01, 0.1, 1,2,5, 10)
 )
 
 set.seed(123)
-model_tuned_svm <- train(
+model_tuned_svm_lin <- train(
   diagnosis ~ ., 
-  data = training_data,
+  data = training_data_pca,
   method = "svmLinear",
   trControl = cv_control,
   tuneGrid = svm_grid,
   metric = "ROC"
 )
 
-plot(model_tuned_svm)
-print(model_tuned_svm$bestTune)
-print(paste("SVM Tune Time (sec):", model_tuned_svm$times$everything["user.self"]))
+plot(model_tuned_svm_lin)
+print(model_tuned_svm_lin$bestTune)
+print(paste("SVM Tune Time (sec):", model_tuned_svm_lin$times$everything["user.self"]))
 ```
+```{r exp3_svm_tune, warning=FALSE}
+svm_grid <- expand.grid(
+  degree = c(2, 3),       # polynomial order
+  scale  = c(0.01, 0.1, 1),  # gamma-like scaling factor
+  C = c(0.01, 0.1, 1,2,5, 10)
+)
 
+set.seed(123)
+model_tuned_svm_poly <- train(
+  diagnosis ~ ., 
+  data = training_data_pca,
+  method = "svmPoly",
+  trControl = cv_control,
+  tuneGrid = svm_grid,
+  metric = "ROC"
+)
+
+
+plot(model_tuned_svm_poly)
+print(model_tuned_svm_poly$bestTune)
+print(paste("SVM Tune Time (sec):", model_tuned_svm_poly$times$everything["user.self"]))
+```
 ## Overall Performance
 
 This section combines all 9 trained models (3x Baseline, 3x PCA, 3x Tuned) to find the single best-performing model based on cross-validation results.
@@ -808,25 +989,58 @@ all_models_list <- list(
   Base_SVM = models_baseline$svm,
   PCA_GLM  = models_pca$glm,
   PCA_GNB  = models_pca$gnb,
-  PCA_SVM  = models_pca$svm,
+  PCA_SVM_LIN  = models_pca$svm_linear,
+  PCA_SVM_POLY  = models_pca$svm_poly,
   Tune_GLM = model_tuned_glm,
   Tune_GNB = model_tuned_gnb,
-  Tune_SVM = model_tuned_svm
+  Tune_SVM_Lin = model_tuned_svm_lin,
+  Tune_SVM_Poly = model_tuned_svm_poly
 )
 
-# --- Create a resamples object for comparison ---
-all_results <- resamples(all_models_list)
 
-# --- Display summary table of CV metrics ---
-# This table shows the mean for all 4 metrics for all 9 models
-summary(all_results)
 
-# --- Plot the results for final selection ---
-dotplot(all_results, metric = "ROC", main = "CV Comparison: AUC-ROC")
-dotplot(all_results, metric = "Recall", main = "CV Comparison: Recall")
-dotplot(all_results, metric = "F1", main = "CV Comparison: F1-Score")
-dotplot(all_results, metric = "Accuracy", main = "CV Comparison: Accuracy")
+
+df <- do.call(rbind, lapply(seq_along(all_models_list), function(i) {
+  
+  model_name <- names(all_models_list)[i]
+  model <- all_models_list[[i]]
+  best_row <- model$results[which.max(model$results$ROC.ROC), , drop = FALSE]
+  data.frame(
+    Model   = model_name,
+    Accuracy = best_row[["Accuracy.Accuracy"]],
+    ROC      = best_row[["ROC.ROC"]],
+    Recall   = best_row[["Recall.Sens"]],
+    F1       = best_row[["F1"]],
+    Execution_time = model$times$everything["elapsed"]
+  )
+}))
+
+
 ```
+
+```{r}
+df['log_time_100r'] = log1p( 100* (df$Execution_time / nrow(training_data_pca)))
+w = 0.9
+df$score = w * df$ROC + (1 - w) * (1 - df$log_time_100r)
+```
+
+
+```{r}
+ggplot(df, aes(x = ROC, y = Execution_time, color = Model)) +
+  geom_point(size = 4, alpha = 0.8) +
+  geom_text(aes(label = Model), vjust = -1.2, size = 3.5) + 
+  labs(
+    title = "Model Performance vs. Training Time Trade-off",
+    subtitle = "Best models are in the top-left corner (High Accuracy, Low Time)",
+    x = "Mean Accuracy (10-fold CV)",
+    y = "Mean Training Time (seconds)"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+
+
 
 ## Model selection and generalization error
 
@@ -840,17 +1054,17 @@ Finally, we select the **single best model** from the `all_results` comparison a
 # FOR THIS EXAMPLE, let's assume 'Tune_SVM' (model_tuned_svm) was the best.
 # You MUST change this line to reflect your actual best model.
 
-final_model <- model_tuned_svm 
+final_model <- model_tuned_svm_poly 
 print(paste("Selected Final Model:", final_model$method, "with params:", 
             paste(names(final_model$bestTune), final_model$bestTune, collapse=", ")))
 
 
 # Step 2: Test on the 20% holdout set
 # Get class predictions
-holdout_pred <- predict(final_model, newdata = holdout_data)
+holdout_pred <- predict(final_model, newdata = holdout_data_pca)
 
 # Get class probabilities (for AUC)
-holdout_probs <- predict(final_model, newdata = holdout_data, type = "prob")
+holdout_probs <- predict(final_model, newdata = holdout_data_pca, type = "prob")
 
 
 # Step 3: Calculate final metrics
@@ -916,252 +1130,11 @@ print(final_metrics)
 
 #B Mathematical derivations [Your derivations here if needed]
 
-#C Implementation details [Your implementation details here if needed]
+#C Implementation details [Your implementation details here if needed
 
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# ANTIC A PARTIR D'ABAIX NO TIRA
-
-
-```{r custom_summary_function, echo=FALSE}
-# This function calculates all the metrics we need
-modelSummary <- function(data, lev, model) {
-  
-  # 1. Get Accuracy (from defaultSummary)
-  #    Requires data$pred and data$obs
-  acc_val <- defaultSummary(data, lev, model)["Accuracy"]
-  
-  # Recall - Best metric for medical case studies
-  recal_val <- defaultSummary(data, lev, model)["Sensitivity"]
-
-  
-  # 2. Get AUC (ROC) (from twoClassSummary)
-  #    Requires class probabilities (e.g., data$M and data$B)
-  roc_val <- twoClassSummary(data, lev, model)["ROC"]
-  
-  # 3. Get F1-Score
-  #    Requires data$pred and data$obs
-  #    We must ensure the "positive" class is 'M' (Malignant)
-  f1_val <- F1_Score(y_true = data$obs, 
-                     y_pred = data$pred, 
-                     positive = "M") # Assumes 'M' is your positive class
-  
-  # 4. Name and return the vector of results
-  c(Accuracy = acc_val, 
-    ROC = roc_val, 
-    F1 = f1_val)
-}
-```
-## Train test split 
-```{r warning=FALSE, echo=FALSE}
-# --- 6. Final Data Splitting ---
-# We will use our *reduced 20-feature dataset* as the starting point.
-
-set.seed(123) # for reproducibility
-train_index <- createDataPartition(data_clean_reduced$diagnosis, p = 0.80, list = FALSE)
-
-# These are now our main training/testing dataframes
-training_data <- data_clean_reduced[train_index, ]
-holdout_data  <- data_clean_reduced[-train_index, ] # For final testing later
-
-
-# --- 7. Model Training (3x3 Experiment) ---
-# We will use 10-fold cross-validation
-cv_control <- trainControl(
-  method = "cv",
-  number = 10,
-  timingSamps = 50,
-  summaryFunction = modelSummary,
-  classProbs = TRUE,
-  savePredictions = "final" # To collect results for t-tests
-)
-```
-
-## Baselines
-
-### GLM
-
-### NB
-
-### SVM
-
-## Build PCA
-
-### LDA/QDA depending on plot - sobre PCA data - si va molt malametn sobre tot
-
-check plot
-
-### GLM on PCA
-
-### NB on PCA
-
-### SVM PCA 
-
-### Hyperparamter tunning
-
-### GLM TH
-
-### NB TH
-
-### SVM Kernel 
-
-
-
-```{r warning=FALSE, echo=FALSE}
-# --- 7.1. EXPERIMENT 1: Models on 20 Reduced Features (Baseline) ---
-# preProcess = c("center", "scale")
-cat("Starting Experiment 1: 20 Reduced Features\n")
-
-model_glm_reduced <- train(
-  diagnosis ~ ., data = training_data, method = "glm",
-  trControl = cv_control, preProcess = c("center", "scale"),
-  metric = "ROC"
-)
-
-model_gnb_reduced <- train(
-  diagnosis ~ ., data = training_data, method = "nb", # 'nb' is Naive Bayes
-  trControl = cv_control, preProcess = c("center", "scale"),
-  metric = "ROC"
-)
-
-model_svm_reduced <- train(
-  diagnosis ~ ., data = training_data, method = "svmLinear",
-  trControl = cv_control, preProcess = c("center", "scale"),
-  metric = "ROC"
-)
-```
-
-
-
-### Perform the PCA
-
-```{r warning=FALSE, echo=FALSE}
-# --- 7.2. EXPERIMENT 2: Models on PCA Components ---
-# preProcess = c("center", "scale", "pca")
-cat("Starting Experiment 2: PCA Components\n")
-
-model_glm_pca <- train(
-  diagnosis ~ ., data = training_data, method = "glm",
-  trControl = cv_control, preProcess = c("center", "scale", "pca"),
-  metric = "ROC"
-)
-
-model_gnb_pca <- train(
-  diagnosis ~ ., data = training_data, method = "nb",
-  trControl = cv_control, preProcess = c("center", "scale", "pca"),
-  metric = "ROC"
-)
-
-model_svm_pca <- train(
-  diagnosis ~ ., data = training_data, method = "svmLinear",
-  trControl = cv_control, preProcess = c("center", "scale", "pca"),
-  metric = "ROC"
-)
-```
-
-
-```{r warning=FALSE, echo=FALSE}
-# --- 7.3. EXPERIMENT 3: Models on LDA Component ---
-cat("Starting Experiment 3: LDA Component (2-Step Method)\n")
-
-# --- Step 1: Train the LDA model itself ---
-# This serves as our "LDA model" for comparison AND as our transformer
-# We use the 20-feature 'training_data'
-cat("Training LDA model (to be used as transformer)...\n")
-model_lda_reduced <- train(
-  diagnosis ~ .,
-  data = training_data, # 20-feature 'training_data'
-  method = "lda",
-  trControl = cv_control, # This is our 10-fold CV
-  preProcess = c("center", "scale")
-)
-
-# --- Step 2: Create the new, single-feature datasets ---
-# We use our trained LDA model to "predict" and extract the new component.
-# This creates new dataframes with just 'diagnosis' and 'LD1'.
-cat("Extracting LD1 component...\n")
-train_data_lda_comp <- data.frame(
-  diagnosis = training_data$diagnosis,
-  LD1 = predict(model_lda_reduced, newdata = training_data)
-)
-
-
-
-# We also transform our holdout data for the final test
-holdout_data_lda_comp <- data.frame(
-  diagnosis = holdout_data$diagnosis,
-  LD1 = predict(model_lda_reduced, newdata = holdout_data)
-)
-# --- Step 3: Train GLM, GNB, and SVM on the new 'LD1' feature ---
-# We must use a *new* cv_control because the data is different
-# (e.g., we don't need to center/scale a single feature).
-cv_control_lda <- trainControl(method = "cv", 
-                               number = 10, 
-                               timingSamps = 50,
-                               summaryFunction = modelSummary,
-                               classProbs = TRUE,
-                               savePredictions = "final")
-
-cat("Training GLM on LDA component...\n")
-model_glm_lda <- train(
-  diagnosis ~ .,
-  data = train_data_lda_comp,
-  method = "glm",
-  trControl = cv_control_lda,
-  metric = "ROC"
-)
-
-cat("Training GNB on LDA component...\n")
-model_gnb_lda <- train(
-  diagnosis ~ .,
-  data = train_data_lda_comp,
-  method = "naive_bayes",
-  trControl = cv_control_lda,
-  metric = "ROC"
-)
-
-cat("Training SVM on LDA component...\n")
-model_svm_lda <- train(
-  diagnosis ~ .,
-  data = train_data_lda_comp,
-  method = "svmLinear",
-  trControl = cv_control_lda,
-  metric = "ROC"
-)
-
-cat("All LDA-component models trained.\n")
-```
 
 
 # Discussion of results
@@ -1180,46 +1153,6 @@ cat("All LDA-component models trained.\n")
 
 
 
-```{r}
-# --- 8. Final Results Comparison (Corrected) ---
-# We now collect all our models.
-all_model_results <- resamples(list(
-  # Experiment 1 (Reduced 20 Features)
-  GLM_Reduced = model_glm_reduced,
-  GNB_Reduced = model_gnb_reduced,
-  SVM_Reduced = model_svm_reduced,
-  
-  # Experiment 2 (PCA Components)
-  GLM_PCA     = model_glm_pca,
-  GNB_PCA     = model_gnb_pca,
-  SVM_PCA     = model_svm_pca,
-
-  # Experiment 3 (LDA Component)
-  GLM_LDA_Comp = model_glm_lda,
-  GNB_LDA_Comp = model_gnb_lda,
-  SVM_LDA_Comp = model_svm_lda
-))
-
-
-# 1. Show the summary table
-cat("Final CV Performance Summary:\n")
-summary(all_model_results)
-
-# 2. Plot the results
-dotplot(
-  all_model_results, 
-  metric = "ROC.ROC"
-)
-
-# 3. Statistical Comparison (as requested by teacher)
-cat("\nFinal Statistical Comparison (Paired t-test):\n")
-all_model_diffs <- diff(all_model_results)
-summary(all_model_diffs)
-```
-
-```{r}
-all_model_results$timings
-```
 
 ## Accuracy vs. Training Time Trade-off
 
@@ -1357,7 +1290,3 @@ final_table_data %>%
   kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F) %>%
   add_header_above(c(" " = 1, "Performance Metrics" = 3, "Cost" = 1))
 ```
-
-
-
-
