@@ -28,6 +28,7 @@ library(MLmetrics)
 library(kableExtra)
 library(caret)
 library(ggcorrplot)
+library(dplyr)
 ```
 
 Here is a draft of the **Abstract**, **Introduction**, **Problem Statement**, and **Related Work** sections for your project, incorporating a review of prior publications using the Breast Cancer Wisconsin (Diagnostic) Dataset (WDBC) and stating our ambitions. You can tailor the language, tone and details as you see fit.
@@ -115,8 +116,8 @@ colnames(data_raw) <- col_names
 
 # --- 4. Remove ID and create factors ---
 data_clean <- data_raw %>%
-  select(-id) %>%
-  mutate(diagnosis = as.factor(diagnosis))
+  dplyr::select(-id) %>% 
+  dplyr::mutate(diagnosis = as.factor(diagnosis))
 ```
 
 
@@ -310,20 +311,21 @@ done in models
 # Methodology
 
 ## Experimental protocol
-After cleaning and reducing the original dataset to 20 key features, the data is split into **80% training** and **20% holdout** sets to ensure fair evaluation. All models are trained using **10-fold cross-validation** to obtain robust performance estimates and minimize overfitting.
+After cleaning the dataset and reducing it to the 20 most informative features, the data is split into **80% training** and **20% holdout** sets to ensure fair and unbiased evaluation. All models are trained using **10-fold cross-validation**, which provides robust performance estimates and helps reduce overfitting by averaging results across multiple folds.
 
-Three groups of experiments are conducted to assess the impact of different feature representations on classification accuracy:
+Three experimental stages are conducted to study how different feature representations and model configurations influence classification performance:
 
 1. **Experiment 1 – Baseline (Reduced Features):**
-   Models (GLM, Gaussian Naive Bayes, and Linear SVM) are trained using the 20 selected features after centering and scaling.
+   GLM, Gaussian Naive Bayes, and Linear SVM are trained using the 20 selected features after applying standard preprocessing (centering and scaling).
 
-2. **Experiment 2 – PCA Components:**
-   The same models are trained on **Principal Component Analysis (PCA)**–transformed data, where dimensionality reduction captures the main variance directions in the dataset.
+2. **Experiment 2 – PCA Representation:**
+   The same models are trained on data transformed through **Principal Component Analysis (PCA)**. This experiment evaluates whether unsupervised dimensionality reduction improves generalization by capturing the main directions of variance.
 
-3. **Experiment 3 – LDA Component:**
-   A **Linear Discriminant Analysis (LDA)** model is first trained to extract a single discriminant component (LD1) summarizing the separation between classes. GLM, Naive Bayes, and SVM are then retrained using only this new feature to test the effectiveness of supervised dimensionality reduction.
+3. **Experiment 3 – Model-specific Hyperparameter Tuning:**
+   Each model undergoes a dedicated hyperparameter optimization procedure (e.g., adjusting the regularization parameter (C) for SVM, or lambda in Logistic Regression). This experiment aims to identify the best-performing configuration for each classifier.
 
-The results from all three setups will later be compared—both across models (GLM vs. NB vs. SVM) and across representations (raw features vs. PCA vs. LDA)—to determine which combination achieves the best generalization performance on unseen data.
+The performance of all experiments will later be compared—both across models (GLM vs. GNB vs. SVM) and across the two feature representations (original vs. PCA)—to determine which approach achieves the strongest generalization on the unseen holdout set.
+
 
 
 ## Method 1: Generalized Linear Model (GLM)
@@ -342,10 +344,40 @@ which ensures predictions stay between 0 and 1.
 ### Theoretical properties and justification
 GLMs are statistically grounded, interpretable, and perform well when the relationship between predictors and the log-odds of the outcome is approximately linear. They provide *probabilistic outputs* and naturally model class probabilities. Logistic regression also maximizes the likelihood of observed labels under a Bernoulli distribution, making it robust for well-separated classes.
 
-### Implementation details
-The GLM was implemented using the `train()` function from the **caret** package with `method = "glm"`, applying **centering and scaling** as preprocessing. Model fitting uses **Iteratively Reweighted Least Squares (IRLS)** to find the maximum-likelihood estimates of \(\beta\). Regularization was not applied in this baseline version.
 
----
+### Implementation details
+
+The GLM is trained using the `train()` function from the **caret** package (`method = "glm"`). By default, this corresponds to **unregularized logistic regression**, where the coefficients (\beta) are estimated by maximizing the log-likelihood via **Iteratively Reweighted Least Squares (IRLS)**.
+
+For the extended experiments, we also consider **regularized logistic regression**, where a penalty term is added to the objective function:
+
+[
+\min_{\beta} ; -\ell(\beta)
+;+; \lambda |\beta|_2^2  \quad \text{(Ridge)}
+]
+
+or
+
+[
+\min_{\beta} ; -\ell(\beta)
+;+; \lambda |\beta|_1  \quad \text{(Lasso)}
+]
+
+Here, (\lambda) controls the strength of regularization:
+
+* **large (\lambda)** → stronger shrinkage, simpler model
+* **small (\lambda)** → coefficients closer to the unregularized model
+
+These regularized GLMs can be fitted via `method = "glmnet"` in caret.
+
+These hyperparameters are tuned in the third experiment using 10-fold cross-validation.
+
+
+| Parameter | Meaning                         | Values tested              |
+| --------- | ------------------------------- | -------------------------- |
+| (\lambda) | Regularization strength (L1/L2) | 0, 0.001, 0.01, 0.1, 1, 10 |
+
+
 
 ## Method 2: Gaussian Naive Bayes (GNB)
 
@@ -363,10 +395,34 @@ The predicted class is the one with the highest posterior probability.
 ### Theoretical properties and justification
 Despite the strong independence assumption, Naive Bayes often performs surprisingly well in practice, especially when features are only weakly correlated. It is simple, fast, and provides a strong probabilistic baseline. GNB is particularly effective when the class distributions are approximately normal and separable in feature space.
 
-### Implementation details
-Implemented via `method = "nb"` in **caret**, with preprocessing including **centering and scaling**. The algorithm estimates each feature’s mean and variance per class, then computes log-posterior probabilities for classification. No parameter tuning is typically needed, making it computationally efficient.
+Here is the improved version of the **Implementation details** section for Gaussian Naive Bayes, including an explanation of its hyperparameters and a clean table of values recommended for tuning.
 
----
+### Implementation details 
+
+Gaussian Naive Bayes (GNB) was implemented using `method = "nb"` from the **caret** package. Before model fitting, all predictors were **centered and scaled**. The classifier estimates, for each class, the mean and variance of every feature, assuming conditional independence among features.
+
+Unlike logistic regression or SVM, GNB has very few tunable parameters. However, for improved robustness and calibration, **caret’s Naive Bayes implementation** allows controlling two useful hyperparameters:
+
+* **Laplace smoothing (`laplace`)**
+  Prevents zero-probability issues in categorical versions of NB; in Gaussian NB it has a mild stabilizing effect.
+
+* **Kernel density estimation (`usekernel`)**
+  If enabled, this replaces the Gaussian assumption with a non-parametric density estimate (useful when features deviate from normality).
+
+These hyperparameters are tuned in the third experiment using 10-fold cross-validation.
+
+
+
+### **Suggested hyperparameter grid**
+
+| Parameter   | Meaning                                 | Values tested |
+| ----------- | --------------------------------------- | ------------- |
+| `laplace`   | Laplace smoothing (stability)           | 0, 0.5, 1     |
+| `usekernel` | Kernel density instead of Gaussian      | TRUE, FALSE   |
+| `adjust`    | Bandwidth multiplier for kernel density | 0.5, 1, 2     |
+
+
+
 
 ## Method 3: Support Vector Machine (SVM)
 
@@ -383,38 +439,56 @@ f(x) = \text{sign}(w^\top x + b).
 ### Theoretical properties and justification
 SVMs are **margin-based classifiers** that provide good generalization, especially in high-dimensional spaces. The hinge loss focuses on difficult cases (support vectors), making the classifier robust to noise and overfitting. A linear kernel is used here since the dataset is well-behaved and moderately dimensional.
 
-### Implementation details
-Implemented using `method = "svmLinear"` in **caret**, with **10-fold cross-validation**. Features were **centered and scaled** before training. The regularization parameter \(C\) was tuned automatically using internal resampling to optimize performance.
+### Implementation details 
+
+Gaussian Naive Bayes (GNB) was implemented using `method = "nb"` from the **caret** package. Before model fitting, all predictors were **centered and scaled**. The classifier estimates, for each class, the mean and variance of every feature, assuming conditional independence among features.
+
+Unlike logistic regression or SVM, GNB has very few tunable parameters. However, for improved robustness and calibration, **caret’s Naive Bayes implementation** allows controlling two useful hyperparameters:
+
+* **Laplace smoothing (`laplace`)**
+  Prevents zero-probability issues in categorical versions of NB; in Gaussian NB it has a mild stabilizing effect.
+
+* **Kernel density estimation (`usekernel`)**
+  If enabled, this replaces the Gaussian assumption with a non-parametric density estimate (useful when features deviate from normality).
+
+These hyperparameters are tuned in the third experiment using 10-fold cross-validation.
+
+
+| Parameter   | Meaning                                 | Values tested |
+| ----------- | --------------------------------------- | ------------- |
+| `laplace`   | Laplace smoothing (stability)           | 0, 0.5, 1     |
+| `usekernel` | Kernel density instead of Gaussian      | TRUE, FALSE   |
+| `adjust`    | Bandwidth multiplier for kernel density | 0.5, 1, 2     |
+
+
 
 
 ## Comparison framework
 
-To ensure a fair comparison, all models were trained using:
-- The **same 10-fold cross-validation** (`trainControl(method="cv", number=10)`),
-- The **same training/holdout splits**, and
-- The **same preprocessing pipeline** (centering and scaling).
+To determine the most effective approach, the performance of all models (GLM, GNB, SVM) across all three experimental setups (Baseline, PCA, Tuned) will be systematically compared.
 
-Performance metrics such as **Accuracy**, **AUC**, and **F1-score** will be compared across models and experimental setups (baseline, PCA, LDA). Statistical significance tests (e.g., paired *t*-tests on cross-validation results) may be applied to confirm whether performance differences are meaningful.
+The definitive evaluation will be based on model performance on the **unseen 20% holdout set**. This ensures a fair and unbiased assessment of generalization capability.
 
 
 
+### Key Evaluation Metrics
+
+The following standard classification metrics will be computed from the **holdout set predictions** for each model configuration:
+
+* **Accuracy:** The overall proportion of correctly classified instances.
+* **AUC-ROC:** (Area Under the Receiver Operating Characteristic Curve) Measures the model's ability to discriminate between the positive and negative classes, independent of the decision threshold.
+* **Recall:** Measures the model's ability to identify all relevant positive cases (i.e., minimizing false negatives).
+* **F1-Score:** The harmonic mean of Precision and Recall, providing a single score that balances both concerns, which is especially useful for imbalanced datasets.
 
 
+### Analysis and Selection
 
+The comparison will be structured to answer two primary questions by comparing the holdout set metrics:
 
+1.  **Best Model:** Which classifier (**GLM, GNB, or SVM**) achieves the highest overall performance, particularly after its hyperparameters have been optimized in Experiment 3?
+2.  **Best Representation:** Does the **PCA-transformed data** (Experiment 2) lead to better or worse generalization compared to the **original 20 features** (Experiment 1)?
 
-
-
-
-
-
-
-
-
-
-
-
-
+Results from the 10-fold cross-validation (used during training) will also be examined to assess model **stability** and **robustness to data variations**. The final goal is to identify the single model (e.g., "Tuned SVM" or "Baseline GLM") that provides the best and most reliable predictive performance on new data.
 
 
 
@@ -431,6 +505,395 @@ Performance metrics such as **Accuracy**, **AUC**, and **F1-score** will be comp
 
 
 
+```{r setup, include=FALSE}
+# --- 0. Load Required Libraries ---
+# Install these if you don't have them:
+# install.packages(c("caret", "tidyverse", "MLmetrics", "glmnet", "pROC", "e1071", "klaR"))
+
+library(caret)       # For train() and main framework
+library(tidyverse)   # For data manipulation and plotting
+library(MLmetrics)   # For F1_Score
+library(glmnet)      # For regularized GLM (Elastic Net)
+library(pROC)        # For final (AUC)ROC calculation on holdout
+library(e1071)       # Dependency for SVM
+library(klaR)        # Dependency for Naive Bayes
+```
+
+# Discussion of results
+
+## Detailed analysis
+
+### Baseline
+
+This chunk defines our custom evaluation function and sets up the data and cross-validation strategy.
+
+```{r, warning=FALSE}
+# --- 5. Custom Summary Function ---
+# This function calculates all four metrics (Accuracy, AUC, Recall, F1)
+# during cross-validation.
+modelSummary <- function(data, lev, model) {
+  
+  # 1. Get Accuracy (from defaultSummary)
+  #    Requires data$pred and data$obs
+  acc_val <- defaultSummary(data, lev, model)["Accuracy"]
+  
+  # 2. Get AUC (ROC) and Recall (Sensitivity) (from twoClassSummary)
+  #    Requires class probabilities (e.g., data$M and data$B)
+  #    'lev[1]' is the "positive" class (which we set to "M")
+  roc_stats <- twoClassSummary(data, lev, model)
+  roc_val <- roc_stats["ROC"]
+  recal_val <- roc_stats["Sens"] # 'Sens' is Recall
+  
+  # 3. Get F1-Score
+  #    Requires data$pred and data$obs
+  #    We must ensure the "positive" class is 'M' (Malignant)
+  f1_val <- F1_Score(y_true = data$obs, 
+                     y_pred = data$pred, 
+                     positive = lev[1]) # lev[1] is "M"
+  
+  # 4. Name and return the vector of results
+  c(Accuracy = acc_val, 
+    ROC = roc_val, 
+    Recall = recal_val,
+    F1 = f1_val)
+}
+
+# --- 6. Final Data Splitting ---
+# We assume 'data_clean_reduced' is your pre-processed 20-feature dataset
+# For this code to run, let's create a placeholder
+# ---- REMOVE THIS PLACEHOLDER AND LOAD YOUR REAL DATA ----
+data_clean_reduced <- data.frame(
+  matrix(rnorm(100 * 20), 100, 20),
+  diagnosis = factor(sample(c("M", "B"), 100, replace = TRUE))
+)
+# -----------------------------------------------------------
+
+set.seed(123) # for reproducibility
+train_index <- createDataPartition(data_clean_reduced$diagnosis, p = 0.80, list = FALSE)
+
+training_data <- data_clean_reduced[train_index, ]
+holdout_data  <- data_clean_reduced[-train_index, ] # For final testing later
+
+# CRITICAL: Set "M" (Malignant) as the "positive" class
+# This ensures Recall and F1 are calculated correctly.
+training_data$diagnosis <- relevel(training_data$diagnosis, ref = "M")
+holdout_data$diagnosis  <- relevel(holdout_data$diagnosis, ref = "M")
+
+# --- 7. Cross-Validation Control ---
+cv_control <- trainControl(
+  method = "cv",
+  number = 10,
+  summaryFunction = modelSummary, # Use our custom function
+  classProbs = TRUE,            # MUST be TRUE for AUC (ROC)
+  savePredictions = "final",
+  timingSamps = 50              # Samples for timing execution
+)
+```
+
+### Experiment 1: Baseline Models
+
+```{r, warning=FALSE}
+# --- Experiment 1: Baseline Models (Reduced Features) ---
+# We will store models in a list to compare them easily
+models_baseline <- list()
+
+# 1.1: Generalized Linear Model (GLM)
+set.seed(123)
+models_baseline$glm <- train(
+  diagnosis ~ ., 
+  data = training_data,
+  method = "glm",
+  family = "binomial", # Specifies logistic regression
+  trControl = cv_control,
+  metric = "ROC"      # Optimize for AUC-ROC
+)
+
+# 1.2: Gaussian Naive Bayes (GNB)
+set.seed(123)
+models_baseline$gnb <- train(
+  diagnosis ~ ., 
+  data = training_data,
+  method = "nb",
+  trControl = cv_control,
+  metric = "ROC"
+)
+
+# 1.3: Linear Support Vector Machine (SVM)
+set.seed(123)
+models_baseline$svm <- train(
+  diagnosis ~ ., 
+  data = training_data,
+  method = "svmLinear", # Using linear kernel
+  trControl = cv_control,
+  metric = "ROC"
+)
+
+# --- Collect and display baseline CV results ---
+baseline_results <- resamples(models_baseline)
+summary(baseline_results)
+
+# --- Plot Baseline Comparison ---
+dotplot(baseline_results, metric = "ROC")
+dotplot(baseline_results, metric = "Recall")
+
+# --- Execution Times ---
+data.frame(
+  Model = names(models_baseline),
+  ExecTime_sec = sapply(models_baseline, function(x) x$times$everything["user.self"])
+)
+```
+
+### Experiment 2: PCA
+
+Here we run **Experiment 2: PCA Representation**. We add `preProcess = "pca"` to the `train()` call. This correctly applies PCA *within* the cross-validation folds, preventing data leakage.
+
+*Note on PCA vs. LDA:* You asked whether to use PCA or LDA.
+
+  * **PCA (Principal Component Analysis)** is **unsupervised**. It finds components that explain the most *variance* in the features, without looking at the `diagnosis` class.
+  * **LDA (Linear Discriminant Analysis)** is **supervised**. It finds components that maximize the *separation* between the classes (`M` vs. `B`).
+  * **Decision:** If your goal is just dimensionality reduction, PCA is standard. If your primary goal is class separation (which it is\!), **LDA is often a better choice for classification**. You can test it by replacing `"pca"` with `"lda"` in the `preProcess` argument.
+
+<!-- end list -->
+
+```{r exp2_pca, warning=FALSE}
+# --- Experiment 2: PCA Representation ---
+models_pca <- list()
+
+# 2.1: GLM + PCA
+set.seed(123)
+models_pca$glm <- train(
+  diagnosis ~ ., 
+  data = training_data,
+  method = "glm",
+  family = "binomial",
+  preProcess = c("center", "scale", "pca"), # Apply PCA
+  trControl = cv_control,
+  metric = "ROC"
+)
+
+# 2.2: GNB + PCA
+set.seed(123)
+models_pca$gnb <- train(
+  diagnosis ~ ., 
+  data = training_data,
+  method = "nb",
+  preProcess = c("center", "scale", "pca"),
+  trControl = cv_control,
+  metric = "ROC"
+)
+
+# 2.3: Linear SVM + PCA
+set.seed(123)
+models_pca$svm <- train(
+  diagnosis ~ ., 
+  data = training_data,
+  method = "svmLinear",
+  preProcess = c("center", "scale", "pca"),
+  trControl = cv_control,
+  metric = "ROC"
+)
+
+# --- Collect and display PCA CV results ---
+pca_results <- resamples(models_pca)
+summary(pca_results)
+
+# --- Plot PCA Comparison ---
+dotplot(pca_results, metric = "ROC")
+dotplot(pca_results, metric = "Recall")
+
+# --- Execution Times ---
+data.frame(
+  Model = names(models_pca),
+  ExecTime_sec = sapply(models_pca, function(x) x$times$everything["user.self"])
+)
+```
+
+### Hyperparametrization
+
+Here we run **Experiment 3: Model-specific Hyperparameter Tuning**.
+
+#### GLM
+
+We tune the **Regularized GLM (glmnet)**. This tunes `alpha` (L1/Lasso vs. L2/Ridge) and `lambda` (regularization strength).
+
+```{r exp3_glm_tune, warning=FALSE}
+# --- 3.1: GLM (glmnet) Tuning ---
+
+# Create a grid of hyperparameters
+glm_grid <- expand.grid(
+  alpha = seq(0, 1, by = 0.5),      # 0=Ridge, 1=Lasso, 0.5=ElasticNet
+  lambda = c(0.0001, 0.001, 0.01, 0.1, 1)
+)
+
+set.seed(123)
+model_tuned_glm <- train(
+  diagnosis ~ ., 
+  data = training_data,
+  method = "glmnet",
+  trControl = cv_control,
+  tuneGrid = glm_grid,
+  metric = "ROC"
+)
+
+plot(model_tuned_glm)
+print(model_tuned_glm$bestTune)
+print(paste("GLM Tune Time (sec):", model_tuned_glm$times$everything["user.self"]))
+```
+
+#### GNB
+
+We tune the **Gaussian Naive Bayes** model, testing `laplace` smoothing, `usekernel` for non-parametric density, and `adjust` for kernel bandwidth.
+
+```{r exp3_gnb_tune, warning=FALSE}
+# --- 3.2: GNB Tuning ---
+
+# Create a grid based on your methodology
+gnb_grid <- expand.grid(
+  laplace = c(0, 0.5, 1),
+  usekernel = c(TRUE, FALSE),
+  adjust = c(0.5, 1, 2)
+)
+
+set.seed(123)
+model_tuned_gnb <- train(
+  diagnosis ~ ., 
+  data = training_data,
+  method = "nb",
+  trControl = cv_control,
+  tuneGrid = gnb_grid,
+  metric = "ROC"
+)
+
+plot(model_tuned_gnb)
+print(model_tuned_gnb$bestTune)
+print(paste("GNB Tune Time (sec):", model_tuned_gnb$times$everything["user.self"]))
+```
+
+#### SVM
+
+We tune the **Linear SVM**, focusing on the cost parameter `C`, which controls the trade-off between margin width and misclassification.
+
+```{r exp3_svm_tune, warning=FALSE}
+# --- 3.3: SVM (Linear) Tuning ---
+
+# Create a grid for the Cost (C) parameter
+svm_grid <- expand.grid(
+  C = c(0.01, 0.1, 1, 10, 100)
+)
+
+set.seed(123)
+model_tuned_svm <- train(
+  diagnosis ~ ., 
+  data = training_data,
+  method = "svmLinear",
+  trControl = cv_control,
+  tuneGrid = svm_grid,
+  metric = "ROC"
+)
+
+plot(model_tuned_svm)
+print(model_tuned_svm$bestTune)
+print(paste("SVM Tune Time (sec):", model_tuned_svm$times$everything["user.self"]))
+```
+
+## Overall Performance
+
+This section combines all 9 trained models (3x Baseline, 3x PCA, 3x Tuned) to find the single best-performing model based on cross-validation results.
+
+```{r overall_comparison, warning=FALSE}
+# --- Collect all 9 models into one list ---
+all_models_list <- list(
+  Base_GLM = models_baseline$glm,
+  Base_GNB = models_baseline$gnb,
+  Base_SVM = models_baseline$svm,
+  PCA_GLM  = models_pca$glm,
+  PCA_GNB  = models_pca$gnb,
+  PCA_SVM  = models_pca$svm,
+  Tune_GLM = model_tuned_glm,
+  Tune_GNB = model_tuned_gnb,
+  Tune_SVM = model_tuned_svm
+)
+
+# --- Create a resamples object for comparison ---
+all_results <- resamples(all_models_list)
+
+# --- Display summary table of CV metrics ---
+# This table shows the mean for all 4 metrics for all 9 models
+summary(all_results)
+
+# --- Plot the results for final selection ---
+dotplot(all_results, metric = "ROC", main = "CV Comparison: AUC-ROC")
+dotplot(all_results, metric = "Recall", main = "CV Comparison: Recall")
+dotplot(all_results, metric = "F1", main = "CV Comparison: F1-Score")
+dotplot(all_results, metric = "Accuracy", main = "CV Comparison: Accuracy")
+```
+
+## Model selection and generalization error
+
+Finally, we select the **single best model** from the `all_results` comparison above (e.g., the one with the highest mean `ROC` or `Recall`) and test it on the **unseen 20% holdout set** to measure its true generalization error.
+
+```{r final_holdout_test, warning=FALSE}
+# --- 8. Model Selection and Generalization Error ---
+
+# Step 1: Select the best model.
+# By looking at the plots, we choose our winner.
+# FOR THIS EXAMPLE, let's assume 'Tune_SVM' (model_tuned_svm) was the best.
+# You MUST change this line to reflect your actual best model.
+
+final_model <- model_tuned_svm 
+print(paste("Selected Final Model:", final_model$method, "with params:", 
+            paste(names(final_model$bestTune), final_model$bestTune, collapse=", ")))
+
+
+# Step 2: Test on the 20% holdout set
+# Get class predictions
+holdout_pred <- predict(final_model, newdata = holdout_data)
+
+# Get class probabilities (for AUC)
+holdout_probs <- predict(final_model, newdata = holdout_data, type = "prob")
+
+
+# Step 3: Calculate final metrics
+print("--- Holdout Set Performance (Generalization Error) ---")
+
+# A) Get Confusion Matrix, Accuracy, Recall, F1
+# We explicitly set the positive class to "M"
+cm <- confusionMatrix(
+  data = holdout_pred, 
+  reference = holdout_data$diagnosis,
+  positive = "M" 
+)
+print(cm$table) # The confusion matrix
+
+
+# B) Calculate AUC-ROC
+# We need the probabilities for the *positive* class, "M"
+roc_obj <- pROC::roc(
+  response = holdout_data$diagnosis, 
+  predictor = holdout_probs$M,
+  levels = c("B", "M") # Specify levels, B=control, M=case
+)
+auc_val <- pROC::auc(roc_obj)
+
+
+# C) Collect and display all final metrics in a clean table
+final_metrics <- data.frame(
+  Metric = c("Accuracy", "Recall (Sensitivity)", "F1-Score", "AUC-ROC"),
+  Value = c(
+    cm$overall["Accuracy"],
+    cm$byClass["Sensitivity"], # This is Recall
+    cm$byClass["F1"],
+    auc_val
+  )
+)
+
+print(final_metrics)
+```
+
+
+
+
+# Conclusions
 
 
 
@@ -439,6 +902,56 @@ Performance metrics such as **Accuracy**, **AUC**, and **F1-score** will be comp
 
 
 
+
+
+
+# References
+[1]: https://www.nepjol.info/index.php/nccsrj/article/view/75469?utm_source=chatgpt.com "Breast Cancer Prediction: A Comparative Study of Support Vector Machine and Logistic Regression | National College of Computer Studies Research Journal"
+[2]: https://arxiv.org/abs/2306.02449?utm_source=chatgpt.com "The Power Of Simplicity: Why Simple Linear Models Outperform Complex Machine Learning Techniques -- Case Of Breast Cancer Diagnosis"
+[3]: https://beei.org/index.php/EEI/article/view/4448/0?utm_source=chatgpt.com "Breast cancer detection: an effective comparison of different machine learning algorithms on the Wisconsin dataset | Hossin | Bulletin of Electrical Engineering and Informatics"
+
+  Wolberg, W., Mangasarian, O., Street, N., & Street, W. (1993). Breast Cancer Wisconsin (Diagnostic) [Dataset]. UCI Machine Learning Repository. <https://doi.org/10.24432/C5DW2B>.
+
+#A Additional results [Your additional results here if needed]
+
+#B Mathematical derivations [Your derivations here if needed]
+
+#C Implementation details [Your implementation details here if needed]
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# ANTIC A PARTIR D'ABAIX NO TIRA
 
 
 ```{r custom_summary_function, echo=FALSE}
@@ -471,7 +984,29 @@ modelSummary <- function(data, lev, model) {
 }
 ```
 ## Train test split 
+```{r warning=FALSE, echo=FALSE}
+# --- 6. Final Data Splitting ---
+# We will use our *reduced 20-feature dataset* as the starting point.
 
+set.seed(123) # for reproducibility
+train_index <- createDataPartition(data_clean_reduced$diagnosis, p = 0.80, list = FALSE)
+
+# These are now our main training/testing dataframes
+training_data <- data_clean_reduced[train_index, ]
+holdout_data  <- data_clean_reduced[-train_index, ] # For final testing later
+
+
+# --- 7. Model Training (3x3 Experiment) ---
+# We will use 10-fold cross-validation
+cv_control <- trainControl(
+  method = "cv",
+  number = 10,
+  timingSamps = 50,
+  summaryFunction = modelSummary,
+  classProbs = TRUE,
+  savePredictions = "final" # To collect results for t-tests
+)
+```
 
 ## Baselines
 
@@ -503,30 +1038,7 @@ check plot
 
 
 
-
 ```{r warning=FALSE, echo=FALSE}
-# --- 6. Final Data Splitting ---
-# We will use our *reduced 20-feature dataset* as the starting point.
-
-set.seed(123) # for reproducibility
-train_index <- createDataPartition(data_clean_reduced$diagnosis, p = 0.80, list = FALSE)
-
-# These are now our main training/testing dataframes
-training_data <- data_clean_reduced[train_index, ]
-holdout_data  <- data_clean_reduced[-train_index, ] # For final testing later
-
-
-# --- 7. Model Training (3x3 Experiment) ---
-# We will use 10-fold cross-validation
-cv_control <- trainControl(
-  method = "cv",
-  number = 10,
-  timingSamps = 50,
-  summaryFunction = modelSummary,
-  classProbs = TRUE,
-  savePredictions = "final" # To collect results for t-tests
-)
-
 # --- 7.1. EXPERIMENT 1: Models on 20 Reduced Features (Baseline) ---
 # preProcess = c("center", "scale")
 cat("Starting Experiment 1: 20 Reduced Features\n")
@@ -548,7 +1060,13 @@ model_svm_reduced <- train(
   trControl = cv_control, preProcess = c("center", "scale"),
   metric = "ROC"
 )
+```
 
+
+
+### Perform the PCA
+
+```{r warning=FALSE, echo=FALSE}
 # --- 7.2. EXPERIMENT 2: Models on PCA Components ---
 # preProcess = c("center", "scale", "pca")
 cat("Starting Experiment 2: PCA Components\n")
@@ -570,7 +1088,10 @@ model_svm_pca <- train(
   trControl = cv_control, preProcess = c("center", "scale", "pca"),
   metric = "ROC"
 )
+```
 
+
+```{r warning=FALSE, echo=FALSE}
 # --- 7.3. EXPERIMENT 3: Models on LDA Component ---
 cat("Starting Experiment 3: LDA Component (2-Step Method)\n")
 
@@ -840,17 +1361,3 @@ final_table_data %>%
 
 
 
-# Conclusions
-
-# References
-[1]: https://www.nepjol.info/index.php/nccsrj/article/view/75469?utm_source=chatgpt.com "Breast Cancer Prediction: A Comparative Study of Support Vector Machine and Logistic Regression | National College of Computer Studies Research Journal"
-[2]: https://arxiv.org/abs/2306.02449?utm_source=chatgpt.com "The Power Of Simplicity: Why Simple Linear Models Outperform Complex Machine Learning Techniques -- Case Of Breast Cancer Diagnosis"
-[3]: https://beei.org/index.php/EEI/article/view/4448/0?utm_source=chatgpt.com "Breast cancer detection: an effective comparison of different machine learning algorithms on the Wisconsin dataset | Hossin | Bulletin of Electrical Engineering and Informatics"
-
-  Wolberg, W., Mangasarian, O., Street, N., & Street, W. (1993). Breast Cancer Wisconsin (Diagnostic) [Dataset]. UCI Machine Learning Repository. <https://doi.org/10.24432/C5DW2B>.
-
-#A Additional results [Your additional results here if needed]
-
-#B Mathematical derivations [Your derivations here if needed]
-
-#C Implementation details [Your implementation details here if needed]
